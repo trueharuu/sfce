@@ -1,4 +1,3 @@
-#![allow(warnings)]
 #![feature(let_chains, is_none_or)]
 use clap::Parser;
 
@@ -19,6 +18,6 @@ pub mod input;
 fn main() {
     let mut p = program::Sfce::parse();
     if let Err(e) = p.run() {
-        println!("\x1b[1;31merror\x1b[0;1m:\x1b[0m {e}")
+        println!("\x1b[1;31merror\x1b[0m\x1b[1m:\x1b[0m {e}")
     }
 }

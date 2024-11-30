@@ -23,7 +23,7 @@ pub fn move_command(
         .cloned()
         .unwrap_or_default();
     // dbg!(&board);
-    let mut pages = Arc::new(Mutex::new(Grid::default()));
+    let pages = Arc::new(Mutex::new(Grid::default()));
     pattern.queues().par_iter().for_each(|queue| {
         let pl = placements(board.clone(), queue.clone());
         let possible = pl.iter().filter(|x| clears.contains(x.line_clears())).map(|x| {

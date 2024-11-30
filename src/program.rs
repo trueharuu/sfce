@@ -107,7 +107,7 @@ impl Sfce {
         }
 
         if self.args.open_browser {
-            open::that(&self.buf);
+            open::that(&self.buf)?;
         }
 
         Ok(())

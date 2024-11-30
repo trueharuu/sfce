@@ -2,7 +2,7 @@ use std::fmt::Write;
 
 use crate::{
     page::Page,
-    piece::{Piece, Placement, Rotation},
+    piece::{Placement, Rotation},
     program::Sfce,
 };
 

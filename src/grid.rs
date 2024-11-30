@@ -1,7 +1,6 @@
-use std::{collections::HashSet, fmt::Display, hash::Hash};
+use std::fmt::Display;
 
 use fumen::Fumen;
-use itertools::Itertools;
 
 use crate::{fumen::grid_to_fumen, page::Page, traits::CollectVec};
 /// Three-dimensional array, first layer is page, 2nd layer is row, 3rd layer is column
@@ -77,7 +76,7 @@ impl Grid {
     }
 
     pub fn dedup(&mut self) {
-      dedup_by(&mut self.0, |x, y| x == y);
+        dedup_by(&mut self.0, |x, y| x == y);
     }
 }
 
