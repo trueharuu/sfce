@@ -2,10 +2,10 @@ use std::fmt::Display;
 
 use fumen::Fumen;
 
-use crate::{fumen::grid_to_fumen, page::Page, traits::CollectVec};
+use crate::{fumen::grid_to_fumen, board::Board, traits::CollectVec};
 /// Three-dimensional array, first layer is page, 2nd layer is row, 3rd layer is column
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Grid(pub Vec<Page>);
+pub struct Grid(pub Vec<Board>);
 
 impl Grid {
     pub fn to_gray(self) -> Self {
@@ -14,12 +14,12 @@ impl Grid {
 
     pub fn new(str: impl Display) -> Self {
         let s = str.to_string();
-        let z = s.split(';').map(Page::new).collect();
+        let z = s.split(';').map(Board::new).collect();
         Self(z)
     }
 
     pub fn empty(width: usize, height: usize) -> Self {
-        Self(vec![Page::empty(width, height)])
+        Self(vec![Board::empty(width, height)])
     }
 
     pub fn optimized(self) -> Self {
@@ -31,11 +31,11 @@ impl Grid {
         )
     }
 
-    pub fn pages(&self) -> &Vec<Page> {
+    pub fn pages(&self) -> &Vec<Board> {
         &self.0
     }
 
-    pub fn pages_mut(&mut self) -> &mut Vec<Page> {
+    pub fn pages_mut(&mut self) -> &mut Vec<Board> {
         &mut self.0
     }
 
@@ -51,7 +51,7 @@ impl Grid {
         self.pages().iter().map(|x| x.height()).max().unwrap_or(0)
     }
 
-    pub fn add_page(&mut self, page: Page) {
+    pub fn add_page(&mut self, page: Board) {
         self.0.push(page);
     }
 
@@ -103,8 +103,8 @@ impl Display for Grid {
     }
 }
 
-impl Extend<Page> for Grid {
-    fn extend<T: IntoIterator<Item = Page>>(&mut self, iter: T) {
+impl Extend<Board> for Grid {
+    fn extend<T: IntoIterator<Item = Board>>(&mut self, iter: T) {
         for i in iter {
             self.add_page(i);
         }

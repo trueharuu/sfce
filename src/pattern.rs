@@ -82,7 +82,11 @@ impl PatternIterator {
                             parts: vec![*inner.clone()],
                         });
 
+                        
                         let results: Vec<Vec<Piece>> = inner_iter.collect();
+                        if *count > results.len() {
+                          panic!("cannot take {count} pieces from a bag that only has {}", results.len());
+                        }
                         for combination in permutations(&results, *count) {
                             let mut combined = current.clone();
                             combined.extend(combination.into_iter().flatten());

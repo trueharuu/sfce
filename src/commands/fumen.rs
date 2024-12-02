@@ -19,7 +19,7 @@ pub fn fumen_command(f: &mut Sfce, l: FumenCli) -> anyhow::Result<()> {
         FumenCli::Decode { fumen } => write!(
             f.buf,
             "{}",
-            crate::fumen::fumen_to_grid(Fumen::decode(&fumen)?)
+            f.resize(crate::fumen::fumen_to_grid(Fumen::decode(&fumen)?))
         )?,
 
         FumenCli::Glue { fumen } => {

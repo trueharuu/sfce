@@ -1,18 +1,18 @@
 use std::fmt::Write;
 
 use crate::{
-    page::Page,
+    board::Board,
     piece::{Placement, Rotation},
     program::Sfce,
 };
 
 pub fn test_command(s: &mut Sfce) -> anyhow::Result<()> {
-    let a = Page::new("E4|E3G");
+    let a = Board::new("E4|E4|Z2E2|EZ2E");
     let p = Placement {
-        x: 1,
+        x: 3,
         y: 1,
-        rotation: Rotation::North,
-        piece: crate::piece::Piece::I,
+        rotation: Rotation::West,
+        piece: crate::piece::Piece::T,
     };
 
     

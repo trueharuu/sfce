@@ -11,9 +11,9 @@ use crate::{
 };
 
 #[derive(Clone, Debug, Default, PartialEq)]
-pub struct Page(pub Vec<Vec<Piece>>, pub Option<String>);
+pub struct Board(pub Vec<Vec<Piece>>, pub Option<String>);
 
-impl Page {
+impl Board {
     pub fn fumen(&self) -> Fumen {
         self.grid().fumen()
     }
@@ -191,12 +191,12 @@ impl Page {
 
     pub fn set_height(&mut self, height: usize) {
         while self.height() > height {
-            self.rows_mut().remove(0);
+            self.rows_mut().pop();
         }
 
         let w = self.width();
         while self.height() < height {
-            self.rows_mut().insert(0, vec![Piece::E; w])
+            self.rows_mut().push(vec![Piece::E; w])
         }
     }
 
@@ -219,7 +219,7 @@ impl Page {
     }
 }
 
-impl Display for Page {
+impl Display for Board {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -243,7 +243,7 @@ mod parse {
         text, IterParser, Parser,
     };
 
-    use crate::{page::Page, piece::Piece, traits::CollectVec};
+    use crate::{board::Board, piece::Piece, traits::CollectVec};
 
     pub enum Part {
         Piece(Piece),
@@ -291,11 +291,11 @@ mod parse {
         y
     }
 
-    pub fn parser<'a>() -> impl Parser<'a, &'a str, Page, chumsky::extra::Err<Rich<'a, char>>> {
+    pub fn parser<'a>() -> impl Parser<'a, &'a str, Board, chumsky::extra::Err<Rich<'a, char>>> {
         part_parser()
             .map(|x| x.into_iter().flat_map(|x| x.expand()).vec())
             .separated_by(just("|"))
             .collect()
-            .map(|x: Vec<Vec<_>>| Page(x.into_iter().rev().vec(), None))
+            .map(|x: Vec<Vec<_>>| Board(x.into_iter().rev().vec(), None))
     }
 }

@@ -46,7 +46,7 @@ pub enum SfceCommand {
         tetfu: Text<Tetfu>,
         #[arg(short = 'p', long = "pattern")]
         pattern: Text<Pattern>,
-        #[arg(short = 'c', default_value = "0")]
+        #[arg(short = 'c', default_value = "..")]
         clears: Ranged<usize>,
     },
     Test,

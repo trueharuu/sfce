@@ -57,6 +57,35 @@ pub enum Rotation {
     West,
 }
 
+impl Rotation {
+    pub fn cw(self) -> Self {
+        match self {
+            Self::North => Self::East,
+            Self::East => Self::South,
+            Self::South => Self::West,
+            Self::West => Self::North,
+        }
+    }
+
+    pub fn ccw(self) -> Self {
+        match self {
+            Self::East => Self::North,
+            Self::South => Self::East,
+            Self::West => Self::South,
+            Self::North => Self::West,
+        }
+    }
+
+    pub fn flip(self) -> Self {
+        match self {
+            Self::North => Self::South,
+            Self::South => Self::North,
+            Self::East => Self::West,
+            Self::West => Self::East,
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct Placement {
     pub x: usize,

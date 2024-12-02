@@ -7,7 +7,7 @@ pub mod data;
 pub mod fumen;
 pub mod grid;
 pub mod text;
-pub mod page;
+pub mod board;
 pub mod pattern;
 pub mod piece;
 pub mod program;
