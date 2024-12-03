@@ -1,23 +1,25 @@
-use std::fmt::Write;
+use std::{fmt::Write, time::Instant};
 
 use crate::{
     board::Board,
-    piece::{Placement, Rotation},
+    piece::{Piece, Rotation},
+    placement::Placement,
     program::Sfce,
 };
 
 pub fn test_command(s: &mut Sfce) -> anyhow::Result<()> {
-    let a = Board::new("E4|E4|Z2E2|EZ2E");
+    let a = Board::new("E4|E4|E4|GE2G|GE3|G2EG");
     let p = Placement {
-        x: 3,
+        x: 2,
         y: 1,
-        rotation: Rotation::West,
-        piece: crate::piece::Piece::T,
+        rotation: Rotation::South,
+        piece: Piece::T,
     };
 
-    
-    write!(s.buf, "{} {}", s.tetfu(a.with_placement(p).grid()), a.is_valid_placement(p))?;
+    let e = Instant::now();
+    let kl = p.inputs(a, (1, 4), 6);
 
-    
+    write!(s.buf, "{kl:?} {:.3}s", e.elapsed().as_secs_f64())?;
+
     Ok(())
 }

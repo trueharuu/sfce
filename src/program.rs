@@ -6,8 +6,9 @@ use crate::{
         fumen::fumen_command, movec::move_command, pattern::pattern_command, test::test_command,
     },
     grid::Grid,
+    pattern::Pattern,
+    ranged::Ranged,
     text::Text,
-    pattern::Pattern, ranged::Ranged,
 };
 
 #[derive(clap::Parser, Clone, Debug)]
@@ -33,6 +34,8 @@ pub struct Options {
     pub board_height: Option<usize>,
     #[arg(short = '!')]
     pub open_browser: bool,
+    #[arg(short = 'i', default_value = "4")]
+    pub max_input_count: usize,
 }
 
 #[derive(Clone, Debug, clap::Subcommand)]
@@ -92,9 +95,11 @@ impl Sfce {
         match self.sub.clone() {
             SfceCommand::Fumen(l) => fumen_command(self, l)?,
             SfceCommand::Pattern(l) => pattern_command(self, l)?,
-            SfceCommand::Move { tetfu, pattern, clears } => {
-                move_command(self, tetfu.contents(), pattern.contents(), clears)?
-            }
+            SfceCommand::Move {
+                tetfu,
+                pattern,
+                clears,
+            } => move_command(self, tetfu.contents(), pattern.contents(), clears)?,
             SfceCommand::Grid { tetfu } => write!(self.buf, "{}", tetfu.grid())?,
             SfceCommand::Test => test_command(self)?,
         }

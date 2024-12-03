@@ -6,11 +6,12 @@ use fumen::Fumen;
 use crate::{
     data::placements::PLACEMENTS,
     grid::Grid,
-    piece::{Piece, Placement},
+    piece::Piece,
+    placement::Placement,
     traits::{CollectVec, GetWith},
 };
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Board(pub Vec<Vec<Piece>>, pub Option<String>);
 
 impl Board {
@@ -103,7 +104,7 @@ impl Board {
         self.rows().len()
     }
 
-    pub fn is_valid_placement(&self, placement: Placement) -> bool {
+    pub fn is_valid_placement(&self, placement: Placement, allow_floating: bool) -> bool {
         let s = self.clone().as_deoptimized();
         if let Some(pm) =
             PLACEMENTS.get_with(|x| x.0 == placement.piece && x.1 == placement.rotation)
@@ -135,7 +136,7 @@ impl Board {
             // dbg!(&trials);
 
             // if the piece is floating (all cells directly below it are empty)
-            if !trials.iter().any(|x| x.is_filled()) {
+            if !allow_floating && !trials.iter().any(|x| x.is_filled()) {
                 return false;
             }
 

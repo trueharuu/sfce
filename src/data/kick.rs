@@ -1,0 +1,1 @@
+// TODO: add kicktables for SRS, SRS+, SRS-X, SRS-jstris

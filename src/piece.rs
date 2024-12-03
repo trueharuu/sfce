@@ -49,7 +49,7 @@ impl Piece {
     }
 }
 
-#[derive(Clone, Copy, Debug, strum::EnumIter, PartialEq)]
+#[derive(Clone, Copy, Debug, strum::EnumIter, PartialEq, Eq)]
 pub enum Rotation {
     North,
     East,
@@ -84,12 +84,4 @@ impl Rotation {
             Self::West => Self::East,
         }
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct Placement {
-    pub x: usize,
-    pub y: usize,
-    pub rotation: Rotation,
-    pub piece: Piece,
 }

@@ -14,6 +14,7 @@ pub mod program;
 pub mod traits;
 pub mod ranged;
 pub mod input;
+pub mod placement;
 
 fn main() {
     let mut p = program::Sfce::parse();
