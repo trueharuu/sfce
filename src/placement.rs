@@ -64,9 +64,10 @@ impl Placement {
                 continue;
             }
             v2.insert(current_seq.clone());
-            let i = Input::new(board.clone(), self.piece, spawn);
-            let cs = i.remove_all_noops(&current_seq);
-            v2.insert(cs.clone());
+            // let i = Input::new(board.clone(), self.piece, spawn);
+            // let cs = i.remove_all_noops(&current_seq);
+            let cs = current_seq;
+            // v2.insert(cs.clone());
             // if i.has_noops(&cs) {
             //     continue;
             // }
