@@ -103,7 +103,7 @@ fn possible_placements(board: &Board, piece: Piece, ic: usize) -> Grid {
                         new_board.0.insert(i, l.clone());
                     }
 
-                    if p.is_doable(s.clone(), (s.width() / 2, s.height() - 1), ic) {
+                    if p.is_doable(s.clone(), s.spawn(), ic) {
                         pages.add_page(new_board);
                     }
                 }

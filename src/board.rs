@@ -31,6 +31,10 @@ impl Board {
         x
     }
 
+    pub fn spawn(&self) -> (usize, usize) {
+        (self.width() / 2, self.height() - 2)
+    }
+
     pub fn empty(width: usize, height: usize) -> Self {
         Self(vec![vec![Piece::E; width]; height], None)
     }
@@ -202,12 +206,19 @@ impl Board {
     }
 
     pub fn skim(&mut self) {
+        let lc = self.line_clears();
         self.0 = self
             .0
             .clone()
             .into_iter()
             .filter(|x| x.contains(&Piece::E))
-            .vec()
+            .vec();
+
+        let mut i = 0;
+        while i < lc {
+            i += 1;
+            self.0.push(vec![]);
+        }
     }
 
     pub fn skimmed(mut self) -> Self {

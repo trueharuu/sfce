@@ -3,7 +3,9 @@ use strum::EnumIter;
 use crate::{
     board::Board,
     grid::Grid,
-    piece::{Piece, Rotation}, placement::Placement,
+    piece::{Piece, Rotation},
+    placement::Placement,
+    traits::{contiguous_cut_seqs, do_until_same},
 };
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -168,12 +170,10 @@ impl Input {
         };
     }
 
-    
-
-    pub fn is_useful(&self, key: Key) -> bool {
-      let mut c = self.clone();
-      c.send_key(key);
-      &c != self
+    pub fn is_useful(&self, key: &[Key]) -> bool {
+        let mut c = self.clone();
+        c.send_keys(key);
+        &c != self
     }
 
     pub fn send_keys(&mut self, keys: &[Key]) {
@@ -198,8 +198,34 @@ impl Input {
 
         g
     }
-}
 
+    pub fn remove_noop(&self, keys: &[Key]) -> Vec<Key> {
+        // let output = vec![];
+        let mut longest = None;
+        let mut nw = None;
+
+        for (before, seq, after) in contiguous_cut_seqs(keys.to_vec()) {
+            let mut cpy = self.clone();
+            cpy.send_keys(&before);
+            if !cpy.is_useful(&seq)
+                && seq.len() > longest.clone().map(|x: Vec<Key>| x.len()).unwrap_or(0)
+            {
+                longest = Some(seq);
+                nw = Some((before, after));
+            }
+        }
+
+        nw.map(|(x, y)| [x, y].concat()).unwrap_or(keys.to_vec())
+    }
+
+    pub fn remove_all_noops(&self, keys: &[Key]) -> Vec<Key> {
+        do_until_same(keys.to_vec(), |x| self.remove_noop(&x))
+    }
+
+    pub fn has_noops(&self, keys: &[Key]) -> bool {
+        self.remove_all_noops(keys) != keys
+    }
+}
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, EnumIter)]
 pub enum Key {
     MoveLeft,

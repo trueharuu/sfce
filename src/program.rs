@@ -1,4 +1,4 @@
-use std::{fmt::Write, io::Write as iW};
+use std::{fmt::Write, io::Write as iW, time::Instant};
 
 use crate::{
     board_parser::Tetfu,
@@ -32,10 +32,10 @@ pub struct Options {
     pub board_width: Option<usize>,
     #[arg(short = 'h')]
     pub board_height: Option<usize>,
-    #[arg(short = '!')]
-    pub open_browser: bool,
     #[arg(short = 'i', default_value = "4")]
     pub max_input_count: usize,
+    #[arg(short = 's', default_value = "true")]
+    pub stopwatch: bool,
 }
 
 #[derive(Clone, Debug, clap::Subcommand)]
@@ -91,6 +91,7 @@ pub enum PatternCli {
 
 impl Sfce {
     pub fn run(&mut self) -> anyhow::Result<()> {
+      let i = Instant::now();
         // dbg!(&self);
         match self.sub.clone() {
             SfceCommand::Fumen(l) => fumen_command(self, l)?,
@@ -108,11 +109,11 @@ impl Sfce {
             println!("wrote {} bytes to path", self.buf.as_bytes().len());
             std::fs::write(s, self.buf.clone())?;
         } else {
-            write!(std::io::stdout(), "{}", self.buf)?;
+            writeln!(std::io::stdout(), "{}", self.buf)?;
         }
 
-        if self.args.open_browser {
-            open::that(&self.buf)?;
+        if self.args.stopwatch {
+          println!("--> took {:3} seconds", i.elapsed().as_secs_f64())
         }
 
         Ok(())

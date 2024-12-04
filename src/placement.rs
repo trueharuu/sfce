@@ -26,43 +26,25 @@ impl Placement {
         self == input.placement()
     }
 
-    pub fn remove_noop(self, board: Board, keys: &[Key], spawn: (usize, usize)) -> Vec<Key> {
-        let mut i = Input::new(board, self.piece, spawn);
-        let mut t = vec![];
-        for &key in keys {
-            if i.is_useful(key) {
-                i.send_key(key);
-                t.push(key);
-            }
-        }
-
-        let mut t2 = vec![];
-        let mut i = t.iter().peekable();
-        // rudimentary noop detection
-        while let Some(c) = i.next() {
-            if c == &Key::Flip && i.peek() == Some(&&Key::Flip) {
-                i.next();
-            } else {
-                t2.push(*c);
-            }
-        }
-
-        t2
-    }
-
     pub fn is_doable(&self, board: Board, spawn: (usize, usize), max: usize) -> bool {
-        self.inputs(board, spawn, max).is_some()
+        self.inputs(board, spawn, max, true).is_some()
     }
 }
 
 impl Placement {
-    pub fn inputs(self, board: Board, spawn: (usize, usize), max: usize) -> Option<Vec<Key>> {
-        let visited = Arc::new(Mutex::new(HashSet::new()));
-        let queue = Arc::new(Mutex::new(VecDeque::new()));
+    pub fn inputs(
+        self,
+        board: Board,
+        spawn: (usize, usize),
+        max: usize,
+        stop_at_first: bool,
+    ) -> Option<Vec<Key>> {
+        let mut visited = HashSet::new();
+        let mut queue = VecDeque::new();
 
-        queue.lock().unwrap().push_back(Vec::new());
+        queue.push_back(Vec::new());
 
-        let possible_moves = vec![
+        let possible_moves = [
             Key::MoveLeft,
             Key::MoveRight,
             Key::DasLeft,
@@ -72,73 +54,51 @@ impl Placement {
             Key::Flip,
             Key::SoftDrop,
             Key::SonicDrop,
-            // Key::HardDrop,
         ];
 
-        let candidate = Arc::new(Mutex::new(Option::<Vec<Key>>::None));
+        let mut v2 = HashSet::new();
 
-        loop {
-            // Extract all current tasks in the queue.
-            let tasks = {
-                let mut q = queue.lock().unwrap();
-                q.drain(..).collect::<Vec<_>>()
-            };
-
-            if tasks.is_empty() {
-                break;
+        let mut candidate: Option<Vec<Key>> = None;
+        while let Some(current_seq) = queue.pop_front() {
+            if v2.contains(&current_seq) {
+                continue;
+            }
+            v2.insert(current_seq.clone());
+            let i = Input::new(board.clone(), self.piece, spawn);
+            let cs = i.remove_all_noops(&current_seq);
+            v2.insert(cs.clone());
+            // if i.has_noops(&cs) {
+            //     continue;
+            // }
+            if let Some(ref c) = candidate
+                && c.len() < cs.len()
+            {
+                continue;
             }
 
-            // Process tasks in parallel
-            tasks.par_iter().for_each(|current_seq| {
-                let cs = self.remove_noop(board.clone(), current_seq, spawn);
+            if cs.len() > max {
+                continue;
+            }
 
-                {
-                    let current_candidate = candidate.lock().unwrap();
-                    if let Some(ref c) = *current_candidate {
-                        if c.len() < cs.len() {
-                            return;
-                        }
-                    }
+            if self.check_inputs(board.clone(), &cs, spawn) {
+                candidate = Some(cs.clone());
+
+                if stop_at_first {
+                    return Some(cs);
                 }
+            }
 
-                if cs.len() > max {
-                    return;
+            for next_move in possible_moves.iter() {
+                let mut ns = cs.clone();
+                ns.push(*next_move);
+
+                if !visited.contains(&ns) {
+                    visited.insert(ns.clone());
+                    queue.push_back(ns);
                 }
-
-                if self.check_inputs(board.clone(), &cs, spawn) {
-                    let mut current_candidate = candidate.lock().unwrap();
-                    *current_candidate = Some(cs.clone());
-                }
-
-                let mut local_visited = Vec::new();
-
-                for next_move in &possible_moves {
-                    let mut new_sequence = cs.clone();
-                    new_sequence.push(*next_move);
-
-                    {
-                        let mut visited_lock = visited.lock().unwrap();
-                        if visited_lock.contains(&new_sequence) {
-                            continue;
-                        }
-                        visited_lock.insert(new_sequence.clone());
-                    }
-
-                    local_visited.push(new_sequence);
-                }
-
-                // Add new sequences to the queue
-                let mut q = queue.lock().unwrap();
-                for seq in local_visited {
-                    q.push_back(seq);
-                }
-            });
+            }
         }
 
-        Arc::try_unwrap(candidate)
-            .ok()
-            .unwrap()
-            .into_inner()
-            .unwrap()
+        candidate
     }
 }
