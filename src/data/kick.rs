@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crate::piece::{
-    Piece::{self, *},
+    Piece::{self, I, J, L, O, S, T, Z},
     Rotation::{self, East as e, North as n, South as s, West as w},
 };
 
@@ -14,10 +14,10 @@ pub struct Kickset<'a> {
 }
 
 impl<'a> Kickset<'a> {
-    pub fn raw(raw: RawKickset<'a>) -> Self {
+    #[must_use] pub fn raw(raw: RawKickset<'a>) -> Self {
         Self { raw }
     }
-    pub fn get(
+    #[must_use] pub fn get(
         &self,
         piece: Piece,
         initial_rotation: Rotation,
@@ -26,15 +26,14 @@ impl<'a> Kickset<'a> {
         self.raw
             .iter()
             .find(|x| x.0 == piece && x.1 == initial_rotation && x.2 == final_rotation)
-            .map(|x| x.3)
-            .unwrap_or(&[(0, 0)])
+            .map_or(&[(0, 0)], |x| x.3)
     }
 
-    pub fn none() -> Self {
+    #[must_use] pub fn none() -> Self {
       Self::raw(NONE)
     }
 
-    pub fn srs() -> Self {
+    #[must_use] pub fn srs() -> Self {
       Self::raw(SRS)
     }
 }

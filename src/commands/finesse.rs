@@ -7,7 +7,7 @@ use crate::{
     program::Sfce,
 };
 
-pub fn finesse_command(f: &mut Sfce, tetfu: Tetfu) -> anyhow::Result<()> {
+pub fn command(f: &mut Sfce, tetfu: &Tetfu) -> anyhow::Result<()> {
     let board = f
         .resize(tetfu.grid())
         .pages()
@@ -25,7 +25,7 @@ pub fn finesse_command(f: &mut Sfce, tetfu: Tetfu) -> anyhow::Result<()> {
         let mut i = Input::new(&og, p.piece(), board.spawn(), Rotation::North, f.handling());
         if let Some(k) = keys {
             let v = i.show_inputs(&k);
-            write!(f.buf, "{}", f.tetfu(v))?;
+            write!(f.buf, "{}", f.tetfu(&v))?;
         } else {
             eprintln!("this placement is impossible");
         }

@@ -2,7 +2,9 @@ use fumen::{CellColor, Fumen};
 
 use crate::{board::Board, grid::Grid, piece::Piece};
 
-pub fn grid_to_fumen(grid: Grid) -> Fumen {
+#[allow(clippy::module_name_repetitions)]
+#[must_use]
+pub fn grid_to_fumen(grid: &Grid) -> Fumen {
     let mut f = Fumen::default();
     for page in grid.pages() {
         let p = f.add_page();
@@ -14,13 +16,15 @@ pub fn grid_to_fumen(grid: Grid) -> Fumen {
             }
         }
         p.field = field;
-        p.comment = page.comment.clone();
+        p.comment.clone_from(&page.comment);
     }
 
     f
 }
 
-pub fn fumen_to_grid(fumen: Fumen) -> Grid {
+#[allow(clippy::module_name_repetitions)]
+#[must_use]
+pub fn fumen_to_grid(fumen: &Fumen) -> Grid {
     Grid(
         fumen
             .pages

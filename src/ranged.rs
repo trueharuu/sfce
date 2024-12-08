@@ -17,8 +17,8 @@ where
         Self { lo, hi }
     }
 
-    pub fn contains(self, t: T) -> bool {
-        self.lo.is_none_or(|x| t >= x) && self.hi.is_none_or(|x| t <= x)
+    pub fn contains(self, t: &T) -> bool {
+        self.lo.is_none_or(|x| t >= &x) && self.hi.is_none_or(|x| t <= &x)
     }
 }
 

@@ -8,8 +8,8 @@ use crate::{board::Board, fumen::grid_to_fumen, traits::CollectVec};
 pub struct Grid(pub Vec<Board>);
 
 impl Grid {
-    pub fn to_gray(self) -> Self {
-        Self(self.0.into_iter().map(|x| x.to_gray()).collect())
+    #[must_use] pub fn to_gray(self) -> Self {
+        Self(self.0.into_iter().map(super::board::Board::to_gray).collect())
     }
 
     pub fn new(str: impl Display) -> Self {
@@ -18,20 +18,20 @@ impl Grid {
         Self(z)
     }
 
-    pub fn empty(width: usize, height: usize) -> Self {
+    #[must_use] pub fn empty(width: usize, height: usize) -> Self {
         Self(vec![Board::empty(width, height, 0)])
     }
 
-    pub fn optimized(self) -> Self {
+    #[must_use] pub fn optimized(self) -> Self {
         Self(
             self.0
                 .into_iter()
-                .map(|x| x.optimized())
+                .map(super::board::Board::optimized)
                 .collect::<Vec<_>>(),
         )
     }
 
-    pub fn as_deoptimized(mut self) -> Self {
+    #[must_use] pub fn as_deoptimized(mut self) -> Self {
         let w = self.width();
         let h = self.height();
         for page in self.pages_mut() {
@@ -42,7 +42,7 @@ impl Grid {
         self
     }
 
-    pub fn pages(&self) -> &Vec<Board> {
+    #[must_use] pub fn pages(&self) -> &Vec<Board> {
         &self.0
     }
 
@@ -50,16 +50,16 @@ impl Grid {
         &mut self.0
     }
 
-    pub fn fumen(&self) -> Fumen {
-        grid_to_fumen(self.clone())
+    #[must_use] pub fn fumen(&self) -> Fumen {
+        grid_to_fumen(self)
     }
 
-    pub fn width(&self) -> usize {
-        self.pages().iter().map(|x| x.width()).max().unwrap_or(0)
+    #[must_use] pub fn width(&self) -> usize {
+        self.pages().iter().map(super::board::Board::width).max().unwrap_or(0)
     }
 
-    pub fn height(&self) -> usize {
-        self.pages().iter().map(|x| x.height()).max().unwrap_or(0)
+    #[must_use] pub fn height(&self) -> usize {
+        self.pages().iter().map(super::board::Board::height).max().unwrap_or(0)
     }
 
     pub fn add_page(&mut self, page: Board) {
@@ -79,7 +79,7 @@ impl Grid {
     }
 
     pub fn dedup_by_board(&mut self) {
-        dedup_by(&mut self.0, |x, y| x.data == y.data)
+        dedup_by(&mut self.0, |x, y| x.data == y.data);
     }
 
     pub fn dedup_by_comments(&mut self) {
@@ -117,7 +117,7 @@ impl Display for Grid {
             "{}",
             self.pages()[..self.height()]
                 .iter()
-                .map(|x| x.to_string())
+                .map(std::string::ToString::to_string)
                 .vec()
                 .join(";")
         )

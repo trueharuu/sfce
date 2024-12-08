@@ -22,6 +22,7 @@ pub struct Input<'a> {
 }
 
 impl<'a> Input<'a> {
+    #[must_use]
     pub fn new(
         board: &'a Board,
         piece: Piece,
@@ -30,17 +31,19 @@ impl<'a> Input<'a> {
         handling: Handling,
     ) -> Self {
         Self {
-            board,
             piece,
+            board,
             location,
             rotation,
             handling,
         }
     }
+    #[must_use]
     pub fn placement(&self) -> Placement {
         Placement::new(self.piece, self.location.0, self.location.1, self.rotation)
     }
 
+    #[must_use]
     pub fn is_valid(&self, placement: Placement) -> bool {
         self.board.is_valid_placement(placement, true)
     }
@@ -88,6 +91,7 @@ impl<'a> Input<'a> {
         }
     }
 
+    #[must_use]
     pub fn can_move(&self, direction: Rotation) -> bool {
         let mut z = *self;
         match direction {
@@ -205,6 +209,7 @@ impl<'a> Input<'a> {
         }
     }
 
+    #[must_use]
     pub fn place(&self) -> Board {
         self.board.with_placement(self.placement())
     }
@@ -223,6 +228,7 @@ impl<'a> Input<'a> {
         };
     }
 
+    #[must_use]
     pub fn is_useful(&self, key: &[Key]) -> bool {
         let mut c = *self;
         c.send_keys(key);
@@ -235,6 +241,7 @@ impl<'a> Input<'a> {
         }
     }
 
+    #[must_use]
     pub fn can(&self, key: Key) -> bool {
         let mut c = *self;
         c.send_key(key);
@@ -254,6 +261,7 @@ impl<'a> Input<'a> {
         g
     }
 
+    #[must_use]
     pub fn remove_noop(&self, keys: &[Key]) -> Vec<Key> {
         // let output = vec![];
         let mut longest = None;
@@ -262,8 +270,7 @@ impl<'a> Input<'a> {
         for (before, seq, after) in contiguous_cut_seqs(keys.to_vec()) {
             let mut cpy = *self;
             cpy.send_keys(&before);
-            if !cpy.is_useful(&seq)
-                && seq.len() > longest.clone().map(|x: Vec<Key>| x.len()).unwrap_or(0)
+            if !cpy.is_useful(&seq) && seq.len() > longest.clone().map_or(0, |x: Vec<Key>| x.len())
             {
                 longest = Some(seq);
                 nw = Some((before, after));
@@ -273,10 +280,12 @@ impl<'a> Input<'a> {
         nw.map(|(x, y)| [x, y].concat()).unwrap_or(keys.to_vec())
     }
 
+    #[must_use]
     pub fn remove_all_noops(&self, keys: &[Key]) -> Vec<Key> {
         do_until_same(keys.to_vec(), |x| self.remove_noop(&x))
     }
 
+    #[must_use]
     pub fn has_noops(&self, keys: &[Key]) -> bool {
         self.remove_all_noops(keys) != keys
     }

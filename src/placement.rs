@@ -13,31 +13,31 @@ use crate::{
 pub struct Placement(Piece, usize, usize, Rotation);
 
 impl Placement {
-    pub fn new(piece: Piece, x: usize, y: usize, rotation: Rotation) -> Self {
+    #[must_use] pub fn new(piece: Piece, x: usize, y: usize, rotation: Rotation) -> Self {
         Placement(piece, x, y, rotation)
     }
 
-    pub fn piece(&self) -> Piece {
+    #[must_use] pub fn piece(&self) -> Piece {
         self.0
     }
 
-    pub fn x(&self) -> usize {
+    #[must_use] pub fn x(&self) -> usize {
         self.1
     }
 
-    pub fn y(&self) -> usize {
+    #[must_use] pub fn y(&self) -> usize {
         self.2
     }
 
-    pub fn location(&self) -> (usize, usize) {
+    #[must_use] pub fn location(&self) -> (usize, usize) {
         (self.1, self.2)
     }
 
-    pub fn rotation(&self) -> Rotation {
+    #[must_use] pub fn rotation(&self) -> Rotation {
         self.3
     }
 
-    pub fn at(mut self, (x, y): (usize, usize)) -> Self {
+    #[must_use] pub fn at(mut self, (x, y): (usize, usize)) -> Self {
         self.move_to((x, y));
         self
     }
@@ -59,7 +59,7 @@ impl Placement {
         self.2 = y;
     }
 
-    pub fn check_inputs(
+    #[must_use] pub fn check_inputs(
         self,
         board: &Board,
         keys: &[Key],
@@ -72,7 +72,7 @@ impl Placement {
         self == input.placement()
     }
 
-    pub fn is_input_useful(
+    #[must_use] pub fn is_input_useful(
         self,
         board: &Board,
         orig_keys: &[Key],
@@ -86,14 +86,14 @@ impl Placement {
         i.can(key)
     }
 
-    pub fn is_doable(&self, board: &Board, spawn: (usize, usize), mut handling: Handling) -> bool {
+    #[must_use] pub fn is_doable(&self, board: &Board, spawn: (usize, usize), mut handling: Handling) -> bool {
         handling.finesse = false;
         self.inputs(board, spawn, handling).is_some()
     }
 }
 
 impl Placement {
-    pub fn finesse(
+    #[must_use] pub fn finesse(
         self,
         board: &Board,
         spawn: (usize, usize),
@@ -102,7 +102,7 @@ impl Placement {
         handling.finesse = true;
         self.inputs(board, spawn, handling)
     }
-    pub fn inputs(
+    #[must_use] pub fn inputs(
         self,
         board: &Board,
         spawn: (usize, usize),
@@ -167,7 +167,7 @@ impl Placement {
                 }
             }
 
-            for next_move in possible_moves.iter() {
+            for next_move in &possible_moves {
                 if !self.is_input_useful(board, &cs, *next_move, spawn, handling) {
                     continue;
                     // println!("deemed {next_move:?} unhelpful with {cs:?}")

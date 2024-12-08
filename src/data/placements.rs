@@ -1,5 +1,5 @@
 use crate::piece::{
-    Piece::{self, *},
+    Piece::{self, I, J, L, O, S, T, Z},
     Rotation::{self, East as e, North as n, South as s, West as w},
 };
 

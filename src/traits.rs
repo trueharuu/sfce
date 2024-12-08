@@ -86,12 +86,9 @@ where
     type Item = I::Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        for item in self.iter.by_ref() {
-            if self.seen.insert(item.clone()) {
-                return Some(item);
-            }
-        }
-        None
+        self.iter
+            .by_ref()
+            .find(|item| self.seen.insert(item.clone()))
     }
 }
 
@@ -109,7 +106,7 @@ impl<I, F> Iterator for FullyDedupByIter<I, F>
 where
     I: Iterator,
     F: FnMut(&I::Item, &I::Item) -> bool,
-    I::Item: Clone
+    I::Item: Clone,
 {
     type Item = I::Item;
 

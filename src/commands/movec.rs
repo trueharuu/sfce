@@ -15,10 +15,10 @@ use crate::{
     traits::{CollectVec, FullyDedup},
 };
 
-pub fn move_command(
+pub fn command(
     f: &mut Sfce,
-    tetfu: Tetfu,
-    pattern: Pattern,
+    tetfu: &Tetfu,
+    pattern: &Pattern,
     clears: Ranged<usize>,
     minimal: bool,
 ) -> anyhow::Result<()> {
@@ -39,20 +39,20 @@ pub fn move_command(
     qbar.set_prefix("Generating placements for queue");
     qbar.set_style(style);
     for queue in pattern.queues() {
-        qbar.set_message(queue.iter().map(|x| x.to_string()).vec().join(""));
+        qbar.set_message(queue.iter().map(std::string::ToString::to_string).vec().join(""));
         qbar.inc(1);
 
         let apoq = all_placements_of_queue(f, &board, queue.pieces());
         let ap = apoq
             .iter()
             .map(|x| (x, board.with_many_placements(x).with_comment(&queue)))
-            .filter(|x| clears.contains(x.1.line_clears()))
+            .filter(|x| clears.contains(&x.1.line_clears()))
             .fully_dedup_by(|(x, _), (y, _)| {
                 // println!("{px:?} = {py:?}");
-                minimal && x.iter().map(|x| x.piece()).eq(y.iter().map(|x| x.piece()))
+                minimal && x.iter().map(super::super::placement::Placement::piece).eq(y.iter().map(super::super::placement::Placement::piece))
             })
-            // .fully_dedup_by_key(|x| x.1.clone())
-            // .filter(|x| is_doable(f, &board, x.0))
+            .fully_dedup_by_key(|x| x.1.clone())
+            .filter(|x| is_doable(f, &board, x.0))
             .map(|x| x.1);
         // println!("{:?}", ap.vec())
 
@@ -60,7 +60,7 @@ pub fn move_command(
     }
 
     pages.dedup_by_board();
-    write!(f.buf, "{}", f.tetfu(pages))?;
+    write!(f.buf, "{}", f.tetfu(&pages))?;
 
     Ok(())
 }

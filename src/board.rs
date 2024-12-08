@@ -20,14 +20,17 @@ pub struct Board {
 }
 
 impl Board {
+    #[must_use]
     pub fn fumen(&self) -> Fumen {
         self.grid().fumen()
     }
 
+    #[must_use]
     pub fn grid(&self) -> Grid {
         Grid(vec![self.clone()])
     }
 
+    #[must_use]
     pub fn get(&self, x: usize, y: usize) -> Piece {
         self.data
             .get(y)
@@ -36,6 +39,7 @@ impl Board {
             .unwrap_or(Piece::E)
     }
 
+    #[must_use]
     pub fn fumen_page(&self) -> fumen::Page {
         self.fumen().pages[0].clone()
     }
@@ -47,10 +51,12 @@ impl Board {
         x
     }
 
+    #[must_use]
     pub fn spawn(&self) -> (usize, usize) {
         (self.width() / 2, self.total_height() - self.margin)
     }
 
+    #[must_use]
     pub fn empty(width: usize, height: usize, margin: usize) -> Self {
         Self {
             data: vec![vec![Piece::E; width]; height + margin],
@@ -59,6 +65,7 @@ impl Board {
         }
     }
 
+    #[must_use]
     pub fn only_gray(self) -> Self {
         Self {
             data: self
@@ -81,6 +88,7 @@ impl Board {
         }
     }
 
+    #[must_use]
     pub fn to_gray(self) -> Self {
         Self {
             data: self
@@ -97,6 +105,7 @@ impl Board {
         }
     }
 
+    #[must_use]
     pub fn rows(&self) -> &Vec<Vec<Piece>> {
         &self.data
     }
@@ -105,6 +114,7 @@ impl Board {
         &mut self.data
     }
 
+    #[must_use]
     pub fn optimized(self) -> Self {
         Self {
             data: self
@@ -135,6 +145,7 @@ impl Board {
         }
     }
 
+    #[must_use]
     pub fn as_deoptimized(mut self) -> Self {
         let w = self.width();
         for row in self.rows_mut() {
@@ -146,18 +157,26 @@ impl Board {
         self
     }
 
+    #[must_use]
     pub fn width(&self) -> usize {
-        self.rows().iter().map(|x| x.len()).max().unwrap_or(0)
+        self.rows()
+            .iter()
+            .map(std::vec::Vec::len)
+            .max()
+            .unwrap_or(0)
     }
 
+    #[must_use]
     pub fn height(&self) -> usize {
         self.rows().len() - self.margin
     }
 
+    #[must_use]
     pub fn total_height(&self) -> usize {
         self.rows().len()
     }
 
+    #[must_use]
     pub fn is_valid_placement(&self, placement: Placement, allow_floating: bool) -> bool {
         let s = self.clone().as_deoptimized();
         if let Some(pm) =
@@ -165,25 +184,31 @@ impl Board {
         {
             let mut trials = vec![];
             for offset in pm.2 {
-                let dy = placement.y() as isize + offset.1;
-                let dx = placement.x() as isize + offset.0;
+                if let (Some(dx), Some(dy)) = (
+                    placement.x().checked_add_signed(offset.0),
+                    placement.y().checked_add_signed(offset.1),
+                ) {
+                    // if the piece can't fit in the board it's bad
+                    if !s.is_in_bounds(dx, dy) {
+                        return false;
+                    }
 
-                // if the piece can't fit in the board it's bad
-                if !s.is_in_bounds(dx, dy) {
-                    return false;
-                }
+                    // if the piece intersects the board it's bad
+                    if s.data[dy][dx].is_filled() {
+                        return false;
+                    }
 
-                // if the piece intersects the board it's bad
-                if s.data[dy as usize][dx as usize].is_filled() {
-                    return false;
-                }
-
-                // check the cell below
-                if s.is_in_bounds(dx, dy - 1) {
-                    let cell_below = s.data[(dy - 1) as usize][dx as usize];
-                    trials.push(cell_below);
+                    // check the cell below
+                    if let Some(ry) = dy.checked_sub(1)
+                        && s.is_in_bounds(dx, ry)
+                    {
+                        let cell_below = s.data[dy - 1][dx];
+                        trials.push(cell_below);
+                    } else {
+                        trials.push(Piece::D);
+                    }
                 } else {
-                    trials.push(Piece::D);
+                    return false;
                 }
             }
 
@@ -200,9 +225,9 @@ impl Board {
         }
     }
 
-    pub fn is_in_bounds(&self, x: isize, y: isize) -> bool {
-        (0..self.width() as isize).contains(&x)
-            && (0..(self.height() + self.margin) as isize).contains(&y)
+    #[must_use]
+    pub fn is_in_bounds(&self, x: usize, y: usize) -> bool {
+        (0..self.width()).contains(&x) && (0..self.height()).contains(&y)
     }
 
     pub fn place(&mut self, placement: Placement) {
@@ -211,15 +236,18 @@ impl Board {
             PLACEMENTS.get_with(|x| x.0 == placement.piece() && x.1 == placement.rotation())
         {
             for (ox, oy) in pm.2 {
-                let dx = placement.x() as isize + ox;
-                let dy = placement.y() as isize + oy;
-                if self.is_in_bounds(dx, dy) {
-                    self.data[dy as usize][dx as usize] = placement.piece();
+                let dx = placement.x().checked_add_signed(*ox);
+                let dy = placement.y().checked_add_signed(*oy);
+                if let (Some(dx), Some(dy)) = (dx, dy)
+                    && self.is_in_bounds(dx, dy)
+                {
+                    self.data[dy][dx] = placement.piece();
                 }
             }
         }
     }
 
+    #[must_use]
     pub fn with_placement(&self, placement: Placement) -> Self {
         let mut c = self.clone();
         c.place(placement);
@@ -241,12 +269,14 @@ impl Board {
         }
     }
 
+    #[must_use]
     pub fn with_skimmed_placement(&self, placement: Placement) -> Self {
         let mut s = self.clone();
         s.skim_place(placement);
         s
     }
 
+    #[must_use]
     pub fn with_many_placements(&self, placements: &[Placement]) -> Self {
         let mut s = self.clone();
         for p in placements {
@@ -256,6 +286,7 @@ impl Board {
         s
     }
 
+    #[must_use]
     pub fn comment(&self) -> &Option<String> {
         &self.comment
     }
@@ -264,6 +295,7 @@ impl Board {
         self.comment = Some(comment.to_string());
     }
 
+    #[must_use]
     pub fn with_comment(mut self, comment: impl Display) -> Self {
         self.comment = Some(comment.to_string());
         self
@@ -284,7 +316,7 @@ impl Board {
         let w = self.width();
         while self.height() < height {
             let h = self.height();
-            self.rows_mut().insert(h, vec![Piece::E; w])
+            self.rows_mut().insert(h, vec![Piece::E; w]);
         }
     }
 
@@ -318,16 +350,19 @@ impl Board {
         }
     }
 
+    #[must_use]
     pub fn skimmed(mut self) -> Self {
         self.skim();
         self
     }
 
+    #[must_use]
     pub fn line_clears(&self) -> usize {
         self.data.iter().filter(|x| !x.contains(&Piece::E)).count()
     }
 
-    pub fn fast(&self) -> BitBoard {
+    #[must_use]
+    pub fn fast(&self) -> Bits {
         let w = self.width();
         let h = self.height();
         let x = self
@@ -338,7 +373,7 @@ impl Board {
             .iter()
             .map(|x| x.is_filled())
             .vec();
-        BitBoard(w, h, x)
+        Bits(w, h, x)
     }
 }
 
@@ -349,7 +384,11 @@ impl Display for Board {
             "{}",
             self.data
                 .iter()
-                .map(|x| x.iter().map(|y| y.to_string()).vec().join(""))
+                .map(|x| x
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .vec()
+                    .join(""))
                 .rev()
                 .vec()
                 .join("|")
@@ -378,7 +417,7 @@ mod parse {
         pub fn expand(self) -> Vec<Piece> {
             match self {
                 Self::Piece(t) => vec![t],
-                Self::Group(t) => t.into_iter().flat_map(|x| x.expand()).vec(),
+                Self::Group(t) => t.into_iter().flat_map(Part::expand).vec(),
                 Self::Repeat(t, n) => t.expand().repeat(n),
             }
         }
@@ -416,7 +455,7 @@ mod parse {
 
     pub fn parser<'a>() -> impl Parser<'a, &'a str, Board, chumsky::extra::Err<Rich<'a, char>>> {
         part_parser()
-            .map(|x| x.into_iter().flat_map(|x| x.expand()).vec())
+            .map(|x| x.into_iter().flat_map(Part::expand).vec())
             .separated_by(just("|"))
             .collect()
             .map(|x: Vec<Vec<_>>| Board {
@@ -428,4 +467,4 @@ mod parse {
 }
 
 #[derive(Hash, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct BitBoard(usize, usize, Vec<bool>);
+pub struct Bits(usize, usize, Vec<bool>);

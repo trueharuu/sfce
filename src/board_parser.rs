@@ -16,7 +16,7 @@ impl Deref for Tetfu {
 }
 
 impl Tetfu {
-  pub fn grid(&self) -> Grid {
+  #[must_use] pub fn grid(&self) -> Grid {
     self.0.clone()
   }
 }
@@ -30,7 +30,7 @@ impl FromStr for Tetfu {
 
         if s[1..].starts_with("115@") {
             Ok(Self(fumen_to_grid(
-                Fumen::decode(s).map_err(|x| format!("{x}"))?,
+                &Fumen::decode(s).map_err(|x| format!("{x}"))?,
             )))
         } else {
             Ok(Self(Grid::new(s)))

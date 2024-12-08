@@ -8,24 +8,24 @@ use crate::{
     program::{FumenCli, Sfce},
 };
 
-pub fn fumen_command(f: &mut Sfce, l: FumenCli) -> anyhow::Result<()> {
+pub fn command(f: &mut Sfce, l: FumenCli) -> anyhow::Result<()> {
     match l {
         FumenCli::Encode { grid } => write!(f.buf, "{}", {
             if f.program.args.link_type.is_none() {
                 f.program.args.link_type = Some('v');
             }
-            f.tetfu(Grid::new(grid.contents()))
+            f.tetfu(&Grid::new(grid.contents()))
         })?,
         FumenCli::Decode { fumen } => write!(
             f.buf,
             "{}",
-            f.resize(crate::fumen::fumen_to_grid(Fumen::decode(&fumen)?))
+            f.resize(crate::fumen::fumen_to_grid(&Fumen::decode(&fumen)?))
         )?,
 
         FumenCli::Glue { fumen } => {
             let grids = fumen
                 .contents()
-                .split(",")
+                .split(',')
                 .map(Tetfu::from_str)
                 .collect::<Result<Vec<_>, _>>()
                 .map_err(|x| anyhow::anyhow!("{x}"))?;
@@ -37,7 +37,7 @@ pub fn fumen_command(f: &mut Sfce, l: FumenCli) -> anyhow::Result<()> {
                 }
             }
 
-            write!(f.buf, "{}", f.tetfu(fum))?;
+            write!(f.buf, "{}", f.tetfu(&fum))?;
         }
     };
     Ok(())

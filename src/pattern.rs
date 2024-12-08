@@ -7,7 +7,7 @@ use crate::{piece::Piece, traits::CollectVec};
 
 #[derive(Clone, Debug)]
 pub struct Pattern {
-    pub parts: Vec<PatternPart>,
+    pub parts: Vec<Part>,
 }
 
 impl Pattern {
@@ -20,6 +20,7 @@ impl Pattern {
         x
     }
 
+    #[must_use]
     pub fn queues(&self) -> Vec<Queue> {
         self.clone().into_iter().vec()
     }
@@ -29,47 +30,64 @@ impl Pattern {
 pub struct Queue(Vec<Piece>);
 
 impl Queue {
+    #[must_use]
     pub fn empty() -> Self {
         Self(vec![])
     }
 
+    #[must_use]
     pub fn pieces(&self) -> &[Piece] {
         &self.0
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
-      self.0.len()
+        self.0.len()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
-      self.len() == 0
+        self.len() == 0
     }
 
     pub fn iter(&self) -> std::slice::Iter<'_, Piece> {
-      self.0.iter()
+        self.0.iter()
     }
 }
 
 impl Display for Queue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0.iter().map(|x| x.to_string()).join(""))
+        write!(
+            f,
+            "{}",
+            self.0.iter().map(std::string::ToString::to_string).join("")
+        )
     }
 }
 
 impl Extend<Piece> for Queue {
-  fn extend<T: IntoIterator<Item = Piece>>(&mut self, iter: T) {
-      for i in iter {
-        self.0.push(i);
-      }
-  }
+    fn extend<T: IntoIterator<Item = Piece>>(&mut self, iter: T) {
+        for i in iter {
+            self.0.push(i);
+        }
+    }
 }
 
 impl IntoIterator for Queue {
     type Item = Piece;
     type IntoIter = std::vec::IntoIter<Self::Item>;
     fn into_iter(self) -> Self::IntoIter {
+        #[allow(clippy::unnecessary_to_owned)]
         self.pieces().to_vec().into_iter()
     }
+}
+
+impl<'a> IntoIterator for &'a Queue {
+  type Item = &'a Piece;
+  type IntoIter = core::slice::Iter<'a, Piece>;
+  fn into_iter(self) -> Self::IntoIter {
+      self.pieces().iter()
+  }
 }
 
 impl FromStr for Pattern {
@@ -80,7 +98,7 @@ impl FromStr for Pattern {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum PatternPart {
+pub enum Part {
     All(Box<Self>),
     Count(Box<Self>, usize),
     Single(Piece),
@@ -89,11 +107,12 @@ pub enum PatternPart {
     Wildcard,
 }
 
-pub struct PatternIterator {
+pub struct Iter {
     queue: VecDeque<Queue>,
 }
 
-impl PatternIterator {
+impl Iter {
+    #[must_use]
     pub fn new(pattern: &Pattern) -> Self {
         let mut queue = VecDeque::new();
         queue.push_back(Queue::empty()); // Start with an empty sequence
@@ -108,9 +127,9 @@ impl PatternIterator {
 
             while let Some(current) = self.queue.pop_front() {
                 match part {
-                    PatternPart::All(inner) => {
+                    Part::All(inner) => {
                         // Expand the inner pattern to collect all pieces
-                        let inner_iter = PatternIterator::new(&Pattern {
+                        let inner_iter = Iter::new(&Pattern {
                             parts: vec![*inner.clone()],
                         });
 
@@ -118,39 +137,38 @@ impl PatternIterator {
                         if !results.is_empty() {
                             // Generate all permutations of the entire collection of pieces
                             let all_pieces = results.into_iter().concat(); // Flatten all results
-                            for perm in permutations(&all_pieces.pieces(), all_pieces.len()) {
+                            for perm in permutations(all_pieces.pieces(), all_pieces.len()) {
                                 let mut combined = current.clone();
                                 combined.0.extend(perm);
                                 new_queue.push_back(combined);
                             }
                         }
                     }
-                    PatternPart::Count(inner, count) => {
-                        let inner_iter = PatternIterator::new(&Pattern {
+                    Part::Count(inner, count) => {
+                        let inner_iter = Iter::new(&Pattern {
                             parts: vec![*inner.clone()],
                         });
 
                         let results: Vec<_> = inner_iter.collect();
-                        if *count > results.len() {
-                            panic!(
-                                "cannot take {count} pieces from a bag that only has {}",
-                                results.len()
-                            );
-                        }
+                        assert!(
+                            *count <= results.len(),
+                            "cannot take {count} pieces from a bag that only has {}",
+                            results.len()
+                        );
                         for combination in permutations(&results, *count) {
                             let mut combined = current.clone();
                             combined.0.extend(combination.into_iter().flatten());
                             new_queue.push_back(combined);
                         }
                     }
-                    PatternPart::Single(piece) => {
+                    Part::Single(piece) => {
                         let mut combined = current.clone();
                         combined.0.push(*piece);
                         new_queue.push_back(combined);
                     }
-                    PatternPart::Bag(parts) => {
+                    Part::Bag(parts) => {
                         for sub_part in parts {
-                            let sub_iter = PatternIterator::new(&Pattern {
+                            let sub_iter = Iter::new(&Pattern {
                                 parts: vec![sub_part.clone()],
                             });
 
@@ -162,7 +180,7 @@ impl PatternIterator {
                         }
                     }
 
-                    PatternPart::Except(exclusions) => {
+                    Part::Except(exclusions) => {
                         // Define the full set of pieces
                         let all_pieces = [
                             Piece::I,
@@ -173,10 +191,10 @@ impl PatternIterator {
                             Piece::S,
                             Piece::T,
                         ]
-                        .map(PatternPart::Single);
+                        .map(Part::Single);
 
                         // Compute the set difference: all pieces except the exclusions
-                        let filtered_pieces: Vec<PatternPart> = all_pieces
+                        let filtered_pieces: Vec<Part> = all_pieces
                             .iter()
                             .filter(|piece| !exclusions.contains(piece))
                             .cloned()
@@ -184,7 +202,7 @@ impl PatternIterator {
 
                         // Add each filtered piece to the current queue
                         for sub_part in filtered_pieces {
-                            let sub_iter = PatternIterator::new(&Pattern {
+                            let sub_iter = Iter::new(&Pattern {
                                 parts: vec![sub_part.clone()],
                             });
 
@@ -196,7 +214,7 @@ impl PatternIterator {
                         }
                     }
 
-                    PatternPart::Wildcard => {
+                    Part::Wildcard => {
                         for piece in [
                             Piece::I,
                             Piece::J,
@@ -237,7 +255,7 @@ fn permutations<T: Clone>(items: &[T], k: usize) -> Vec<Vec<T>> {
     result
 }
 
-impl Iterator for PatternIterator {
+impl Iterator for Iter {
     type Item = Queue;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -247,9 +265,9 @@ impl Iterator for PatternIterator {
 
 impl IntoIterator for Pattern {
     type Item = Queue;
-    type IntoIter = PatternIterator;
+    type IntoIter = Iter;
     fn into_iter(self) -> Self::IntoIter {
-        PatternIterator::new(&self)
+        Iter::new(&self)
     }
 }
 
@@ -263,29 +281,29 @@ pub mod parse {
 
     use crate::piece::Piece;
 
-    use super::{Pattern, PatternPart};
+    use super::{Pattern, Part};
 
     pub fn parser<'a>() -> impl Parser<'a, &'a str, Pattern> {
         let piece = one_of("IJOLZSTijolzst")
             .map(|x: char| Piece::from_str(&x.to_string()))
             .unwrapped()
-            .map(PatternPart::Single);
-        let wildcard = just("*").to(PatternPart::Wildcard);
+            .map(Part::Single);
+        let wildcard = just("*").to(Part::Wildcard);
         let bag_except = just("^")
             .ignore_then(piece.repeated().at_least(1).collect())
             .delimited_by(just("["), just("]"))
-            .map(PatternPart::Except);
+            .map(Part::Except);
         let bag = piece
             .repeated()
             .at_least(1)
             .collect()
             .delimited_by(just("["), just("]"))
-            .map(PatternPart::Bag);
+            .map(Part::Bag);
         let repeatable = choice((bag_except, bag, wildcard, piece));
         let count = group((repeatable.clone(), text::int(10).from_str().unwrapped()))
-            .map(|(x, y)| PatternPart::Count(Box::new(x), y));
+            .map(|(x, y)| Part::Count(Box::new(x), y));
         let all =
-            group((repeatable.clone(), just("!"))).map(|(x, _)| PatternPart::All(Box::new(x)));
+            group((repeatable.clone(), just("!"))).map(|(x, _)| Part::All(Box::new(x)));
         let part = choice((all, count, repeatable));
         part.separated_by(just(",").or_not())
             .allow_trailing()

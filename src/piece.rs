@@ -18,7 +18,7 @@ pub enum Piece {
 }
 
 impl Piece {
-    pub fn cell_color(self) -> CellColor {
+    #[must_use] pub fn cell_color(self) -> CellColor {
         match self {
             Piece::D | Piece::G => CellColor::Grey,
             Piece::E => CellColor::Empty,
@@ -32,7 +32,7 @@ impl Piece {
         }
     }
 
-    pub fn fum(self) -> fumen::PieceType {
+    #[must_use] pub fn fum(self) -> fumen::PieceType {
         match self {
             Piece::I => fumen::PieceType::I,
             Piece::J => fumen::PieceType::J,
@@ -45,11 +45,11 @@ impl Piece {
         }
     }
 
-    pub fn is_filled(self) -> bool {
+    #[must_use] pub fn is_filled(self) -> bool {
         self != Self::E
     }
 
-    pub fn is_filled_with_piece(self) -> bool {
+    #[must_use] pub fn is_filled_with_piece(self) -> bool {
         self != Self::E && self != Self::G && self != Self::D
     }
 }
@@ -63,7 +63,7 @@ pub enum Rotation {
 }
 
 impl Rotation {
-    pub fn cw(self) -> Self {
+    #[must_use] pub fn cw(self) -> Self {
         match self {
             Self::North => Self::East,
             Self::East => Self::South,
@@ -72,7 +72,7 @@ impl Rotation {
         }
     }
 
-    pub fn ccw(self) -> Self {
+    #[must_use] pub fn ccw(self) -> Self {
         match self {
             Self::East => Self::North,
             Self::South => Self::East,
@@ -81,7 +81,7 @@ impl Rotation {
         }
     }
 
-    pub fn flip(self) -> Self {
+    #[must_use] pub fn flip(self) -> Self {
         match self {
             Self::North => Self::South,
             Self::South => Self::North,

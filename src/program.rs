@@ -3,18 +3,7 @@ use std::{fmt::Write, io::Write as iW, time::Instant};
 use clap::Parser;
 
 use crate::{
-    board_parser::Tetfu,
-    caches::Caches,
-    commands::{
-        finesse::finesse_command, fumen::fumen_command, movec::move_command,
-        pattern::pattern_command, test::test_command,
-    },
-    data::kick::Kickset,
-    grid::Grid,
-    input::DropType,
-    pattern::Pattern,
-    ranged::Ranged,
-    text::Text,
+    board_parser::Tetfu, caches::Caches, commands, data::kick::Kickset, grid::Grid, input::DropType, pattern::Pattern, ranged::Ranged, text::Text
 };
 
 #[derive(Debug)]
@@ -136,10 +125,12 @@ pub enum PatternCli {
 }
 
 impl Sfce {
+    #[must_use]
     pub fn handling(&self) -> Handling {
         self.program.args.handling
     }
 
+    #[must_use]
     pub fn new() -> Self {
         let program = Program::parse();
         Self {
@@ -156,17 +147,23 @@ impl Sfce {
         let i = Instant::now();
         // dbg!(&self);
         match self.program.sub.clone() {
-            SfceCommand::Fumen(l) => fumen_command(self, l)?,
-            SfceCommand::Pattern(l) => pattern_command(self, l)?,
+            SfceCommand::Fumen(l) => commands::fumen::command(self, l)?,
+            SfceCommand::Pattern(l) => commands::pattern::command(self, l)?,
             SfceCommand::Move {
                 tetfu,
                 pattern,
                 clears,
                 minimal,
-            } => move_command(self, tetfu.contents(), pattern.contents(), clears, minimal)?,
-            SfceCommand::Finesse { tetfu } => finesse_command(self, tetfu.contents())?,
+            } => commands::movec::command(
+                self,
+                &tetfu.contents(),
+                &pattern.contents(),
+                clears,
+                minimal,
+            )?,
+            SfceCommand::Finesse { tetfu } => commands::finesse::command(self, &tetfu.contents())?,
             SfceCommand::Grid { tetfu } => write!(self.buf, "{}", tetfu.grid().as_deoptimized())?,
-            SfceCommand::Test => test_command(self)?,
+            SfceCommand::Test => commands::test::command(self)?,
         }
 
         if let Some(s) = &self.program.args.output {
@@ -177,7 +174,7 @@ impl Sfce {
         }
 
         if self.program.args.stopwatch {
-            println!("--> took {:.3} seconds", i.elapsed().as_secs_f64())
+            println!("--> took {:.3} seconds", i.elapsed().as_secs_f64());
         }
 
         self.save_state()?;
@@ -185,7 +182,8 @@ impl Sfce {
         Ok(())
     }
 
-    pub fn tetfu(&self, f: Grid) -> String {
+    #[must_use]
+    pub fn tetfu(&self, f: &Grid) -> String {
         if let Some(t) = self.program.args.link_type {
             if t.is_lowercase() {
                 format!("{t}{}", &f.fumen().encode()[1..])
@@ -206,6 +204,7 @@ impl Sfce {
         }
     }
 
+    #[must_use]
     pub fn resize(&self, mut f: Grid) -> Grid {
         if let Some(w) = self.program.args.board_width {
             f.set_width(w);

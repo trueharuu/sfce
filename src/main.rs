@@ -1,10 +1,6 @@
 #![feature(let_chains, is_none_or)]
 #![warn(clippy::pedantic)]
-use std::{
-    cell::RefCell,
-    rc::Rc,
-    sync::{Arc, Mutex},
-};
+#![allow(clippy::missing_errors_doc, clippy::missing_panics_doc, clippy::struct_excessive_bools)]
 
 use program::Sfce;
 

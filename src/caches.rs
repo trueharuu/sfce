@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    board::{BitBoard, Board},
+    board::{Bits, Board},
     input::Key,
     piece::Piece,
     placement::Placement,
@@ -10,9 +10,9 @@ use crate::{
 
 #[derive(Debug, Default)]
 pub struct Caches {
-    pub is_placement_possible_store: HashMap<(BitBoard, Placement), bool>,
+    pub is_placement_possible_store: HashMap<(Bits, Placement), bool>,
     // pub is_valid_placement_store: HashMap<(BitBoard, Placement, bool), bool>,
-    pub finesse_store: HashMap<(Placement, BitBoard), Vec<Key>>,
+    pub finesse_store: HashMap<(Placement, Bits), Vec<Key>>,
     pub placements_of_store: HashMap<(Board, Piece), Vec<Board>>,
     pub placements_of_many_store: HashMap<(Board, Vec<Piece>), Vec<Board>>,
 }
@@ -56,11 +56,11 @@ impl Sfce {
         // {
         //     *s
         // } else {
-        let valid = board.is_valid_placement(placement, allow_floating);
+        
         // self.caches
         //     .is_valid_placement_store
         //     .insert((f, placement, allow_floating), valid);
-        valid
+        board.is_valid_placement(placement, allow_floating)
         // }
     }
 
