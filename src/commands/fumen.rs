@@ -11,8 +11,8 @@ use crate::{
 pub fn fumen_command(f: &mut Sfce, l: FumenCli) -> anyhow::Result<()> {
     match l {
         FumenCli::Encode { grid } => write!(f.buf, "{}", {
-            if f.args.link_type.is_none() {
-                f.args.link_type = Some('v');
+            if f.program.args.link_type.is_none() {
+                f.program.args.link_type = Some('v');
             }
             f.tetfu(Grid::new(grid.contents()))
         })?,

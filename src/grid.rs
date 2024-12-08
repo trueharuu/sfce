@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use fumen::Fumen;
 
-use crate::{fumen::grid_to_fumen, board::Board, traits::CollectVec};
+use crate::{board::Board, fumen::grid_to_fumen, traits::CollectVec};
 /// Three-dimensional array, first layer is page, 2nd layer is row, 3rd layer is column
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Grid(pub Vec<Board>);
@@ -19,7 +19,7 @@ impl Grid {
     }
 
     pub fn empty(width: usize, height: usize) -> Self {
-        Self(vec![Board::empty(width, height)])
+        Self(vec![Board::empty(width, height, 0)])
     }
 
     pub fn optimized(self) -> Self {
@@ -29,6 +29,17 @@ impl Grid {
                 .map(|x| x.optimized())
                 .collect::<Vec<_>>(),
         )
+    }
+
+    pub fn as_deoptimized(mut self) -> Self {
+        let w = self.width();
+        let h = self.height();
+        for page in self.pages_mut() {
+            page.set_height(h);
+            page.set_width(w);
+        }
+
+        self
     }
 
     pub fn pages(&self) -> &Vec<Board> {
@@ -68,15 +79,21 @@ impl Grid {
     }
 
     pub fn dedup_by_board(&mut self) {
-        dedup_by(&mut self.0, |x, y| x.0 == y.0)
+        dedup_by(&mut self.0, |x, y| x.data == y.data)
     }
 
     pub fn dedup_by_comments(&mut self) {
-        dedup_by(&mut self.0, |x, y| x.1 == y.1);
+        dedup_by(&mut self.0, |x, y| x.comment == y.comment);
     }
 
     pub fn dedup(&mut self) {
         dedup_by(&mut self.0, |x, y| x == y);
+    }
+
+    pub fn set_margin(&mut self, margin: usize) {
+        for page in self.pages_mut() {
+            page.set_margin(margin);
+        }
     }
 }
 
@@ -98,7 +115,11 @@ impl Display for Grid {
         write!(
             f,
             "{}",
-            self.pages().iter().map(|x| x.to_string()).vec().join(";")
+            self.pages()[..self.height()]
+                .iter()
+                .map(|x| x.to_string())
+                .vec()
+                .join(";")
         )
     }
 }

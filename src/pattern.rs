@@ -1,6 +1,7 @@
 use std::{collections::VecDeque, fmt::Display, str::FromStr};
 
 use chumsky::Parser;
+use itertools::Itertools;
 
 use crate::{piece::Piece, traits::CollectVec};
 
@@ -19,16 +20,63 @@ impl Pattern {
         x
     }
 
-    pub fn queues(&self) -> Vec<Vec<Piece>> {
-      self.clone().into_iter().vec()
+    pub fn queues(&self) -> Vec<Queue> {
+        self.clone().into_iter().vec()
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Default)]
+pub struct Queue(Vec<Piece>);
+
+impl Queue {
+    pub fn empty() -> Self {
+        Self(vec![])
+    }
+
+    pub fn pieces(&self) -> &[Piece] {
+        &self.0
+    }
+
+    pub fn len(&self) -> usize {
+      self.0.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+      self.len() == 0
+    }
+
+    pub fn iter(&self) -> std::slice::Iter<'_, Piece> {
+      self.0.iter()
+    }
+}
+
+impl Display for Queue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0.iter().map(|x| x.to_string()).join(""))
+    }
+}
+
+impl Extend<Piece> for Queue {
+  fn extend<T: IntoIterator<Item = Piece>>(&mut self, iter: T) {
+      for i in iter {
+        self.0.push(i);
+      }
+  }
+}
+
+impl IntoIterator for Queue {
+    type Item = Piece;
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.pieces().to_vec().into_iter()
     }
 }
 
 impl FromStr for Pattern {
-  type Err = String;
-  fn from_str(s: &str) -> Result<Self, Self::Err> {
-      Self::new(s)
-  }
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::new(s)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -42,13 +90,13 @@ pub enum PatternPart {
 }
 
 pub struct PatternIterator {
-    queue: VecDeque<Vec<Piece>>,
+    queue: VecDeque<Queue>,
 }
 
 impl PatternIterator {
     pub fn new(pattern: &Pattern) -> Self {
         let mut queue = VecDeque::new();
-        queue.push_back(vec![]); // Start with an empty sequence
+        queue.push_back(Queue::empty()); // Start with an empty sequence
         let mut iter = Self { queue };
         iter.expand_pattern(pattern);
         iter
@@ -66,13 +114,13 @@ impl PatternIterator {
                             parts: vec![*inner.clone()],
                         });
 
-                        let results: Vec<Vec<Piece>> = inner_iter.collect();
+                        let results: Vec<_> = inner_iter.collect();
                         if !results.is_empty() {
                             // Generate all permutations of the entire collection of pieces
-                            let all_pieces = results.concat(); // Flatten all results
-                            for perm in permutations(&all_pieces, all_pieces.len()) {
+                            let all_pieces = results.into_iter().concat(); // Flatten all results
+                            for perm in permutations(&all_pieces.pieces(), all_pieces.len()) {
                                 let mut combined = current.clone();
-                                combined.extend(perm);
+                                combined.0.extend(perm);
                                 new_queue.push_back(combined);
                             }
                         }
@@ -82,20 +130,22 @@ impl PatternIterator {
                             parts: vec![*inner.clone()],
                         });
 
-                        
-                        let results: Vec<Vec<Piece>> = inner_iter.collect();
+                        let results: Vec<_> = inner_iter.collect();
                         if *count > results.len() {
-                          panic!("cannot take {count} pieces from a bag that only has {}", results.len());
+                            panic!(
+                                "cannot take {count} pieces from a bag that only has {}",
+                                results.len()
+                            );
                         }
                         for combination in permutations(&results, *count) {
                             let mut combined = current.clone();
-                            combined.extend(combination.into_iter().flatten());
+                            combined.0.extend(combination.into_iter().flatten());
                             new_queue.push_back(combined);
                         }
                     }
                     PatternPart::Single(piece) => {
                         let mut combined = current.clone();
-                        combined.push(*piece);
+                        combined.0.push(*piece);
                         new_queue.push_back(combined);
                     }
                     PatternPart::Bag(parts) => {
@@ -106,7 +156,7 @@ impl PatternIterator {
 
                             for sub_result in sub_iter {
                                 let mut combined = current.clone();
-                                combined.extend(sub_result);
+                                combined.0.extend(sub_result);
                                 new_queue.push_back(combined);
                             }
                         }
@@ -140,7 +190,7 @@ impl PatternIterator {
 
                             for sub_result in sub_iter {
                                 let mut combined = current.clone();
-                                combined.extend(sub_result);
+                                combined.0.extend(sub_result);
                                 new_queue.push_back(combined);
                             }
                         }
@@ -157,7 +207,7 @@ impl PatternIterator {
                             Piece::T,
                         ] {
                             let mut combined = current.clone();
-                            combined.push(piece);
+                            combined.0.push(piece);
                             new_queue.push_back(combined);
                         }
                     }
@@ -188,7 +238,7 @@ fn permutations<T: Clone>(items: &[T], k: usize) -> Vec<Vec<T>> {
 }
 
 impl Iterator for PatternIterator {
-    type Item = Vec<Piece>;
+    type Item = Queue;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.queue.pop_front()
@@ -196,7 +246,7 @@ impl Iterator for PatternIterator {
 }
 
 impl IntoIterator for Pattern {
-    type Item = Vec<Piece>;
+    type Item = Queue;
     type IntoIter = PatternIterator;
     fn into_iter(self) -> Self::IntoIter {
         PatternIterator::new(&self)

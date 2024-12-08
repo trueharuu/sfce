@@ -1,7 +1,8 @@
 use fumen::CellColor;
+use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Display, EnumString)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, Hash, Serialize, Deserialize)]
 #[strum(ascii_case_insensitive)]
 pub enum Piece {
     I,
@@ -47,9 +48,13 @@ impl Piece {
     pub fn is_filled(self) -> bool {
         self != Self::E
     }
+
+    pub fn is_filled_with_piece(self) -> bool {
+        self != Self::E && self != Self::G && self != Self::D
+    }
 }
 
-#[derive(Clone, Copy, Debug, strum::EnumIter, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, strum::EnumIter, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Rotation {
     North,
     East,

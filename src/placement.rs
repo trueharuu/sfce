@@ -1,60 +1,136 @@
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::{
-    collections::{HashSet, VecDeque},
-    sync::{Arc, Mutex},
-};
+use std::collections::{HashSet, VecDeque};
+
+use serde::{Deserialize, Serialize};
 
 use crate::{
     board::Board,
-    input::{Input, Key},
+    input::{DropType, Input, Key},
     piece::{Piece, Rotation},
+    program::Handling,
 };
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Placement {
-    pub x: usize,
-    pub y: usize,
-    pub rotation: Rotation,
-    pub piece: Piece,
-}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct Placement(Piece, usize, usize, Rotation);
 
 impl Placement {
-    pub fn check_inputs(self, board: Board, keys: &[Key], spawn: (usize, usize)) -> bool {
+    pub fn new(piece: Piece, x: usize, y: usize, rotation: Rotation) -> Self {
+        Placement(piece, x, y, rotation)
+    }
+
+    pub fn piece(&self) -> Piece {
+        self.0
+    }
+
+    pub fn x(&self) -> usize {
+        self.1
+    }
+
+    pub fn y(&self) -> usize {
+        self.2
+    }
+
+    pub fn location(&self) -> (usize, usize) {
+        (self.1, self.2)
+    }
+
+    pub fn rotation(&self) -> Rotation {
+        self.3
+    }
+
+    pub fn at(mut self, (x, y): (usize, usize)) -> Self {
+        self.move_to((x, y));
+        self
+    }
+
+    pub fn move_to(&mut self, (x, y): (usize, usize)) {
+        self.1 = x;
+        self.2 = y;
+    }
+
+    pub fn set_rotation(&mut self, rotation: Rotation) {
+        self.3 = rotation;
+    }
+
+    pub fn set_x(&mut self, x: usize) {
+        self.1 = x;
+    }
+
+    pub fn set_y(&mut self, y: usize) {
+        self.2 = y;
+    }
+
+    pub fn check_inputs(
+        self,
+        board: &Board,
+        keys: &[Key],
+        spawn: (usize, usize),
+        handling: Handling,
+    ) -> bool {
         // println!("trying {keys:?}");
-        let mut input = Input::new(board, self.piece, spawn);
+        let mut input = Input::new(board, self.piece(), spawn, Rotation::North, handling);
         input.send_keys(keys);
         self == input.placement()
     }
 
-    pub fn is_doable(&self, board: Board, spawn: (usize, usize), max: usize) -> bool {
-        self.inputs(board, spawn, max, true).is_some()
+    pub fn is_input_useful(
+        self,
+        board: &Board,
+        orig_keys: &[Key],
+        key: Key,
+        spawn: (usize, usize),
+        handling: Handling,
+    ) -> bool {
+        let mut i = Input::new(board, self.piece(), spawn, Rotation::North, handling);
+        i.send_keys(orig_keys);
+        // println!("currently in state");
+        i.can(key)
+    }
+
+    pub fn is_doable(&self, board: &Board, spawn: (usize, usize), mut handling: Handling) -> bool {
+        handling.finesse = false;
+        self.inputs(board, spawn, handling).is_some()
     }
 }
 
 impl Placement {
+    pub fn finesse(
+        self,
+        board: &Board,
+        spawn: (usize, usize),
+        mut handling: Handling,
+    ) -> Option<Vec<Key>> {
+        handling.finesse = true;
+        self.inputs(board, spawn, handling)
+    }
     pub fn inputs(
         self,
-        board: Board,
+        board: &Board,
         spawn: (usize, usize),
-        max: usize,
-        stop_at_first: bool,
+        handling: Handling,
     ) -> Option<Vec<Key>> {
         let mut visited = HashSet::new();
         let mut queue = VecDeque::new();
 
         queue.push_back(Vec::new());
 
-        let possible_moves = [
-            Key::MoveLeft,
-            Key::MoveRight,
-            Key::DasLeft,
-            Key::DasRight,
-            Key::RotateCW,
-            Key::RotateCCW,
-            Key::Flip,
-            Key::SoftDrop,
-            Key::SonicDrop,
-        ];
+        let mut possible_moves = vec![Key::MoveLeft, Key::MoveRight, Key::CW, Key::CCW];
+
+        if handling.das {
+            possible_moves.insert(0, Key::DasRight);
+            possible_moves.insert(0, Key::DasLeft);
+        }
+
+        if handling.use_180 {
+            possible_moves.push(Key::Flip);
+        }
+
+        if handling.drop_type == DropType::Sonic || handling.drop_type == DropType::Soft {
+            possible_moves.push(Key::SonicDrop);
+        }
+
+        if handling.drop_type == DropType::Soft {
+            possible_moves.push(Key::SoftDrop);
+        }
 
         let mut v2 = HashSet::new();
 
@@ -64,7 +140,7 @@ impl Placement {
                 continue;
             }
             v2.insert(current_seq.clone());
-            // let i = Input::new(board.clone(), self.piece, spawn);
+            // let i = Input::new(board, self.piece, spawn, Rotation::North, handling);
             // let cs = i.remove_all_noops(&current_seq);
             let cs = current_seq;
             // v2.insert(cs.clone());
@@ -74,22 +150,28 @@ impl Placement {
             if let Some(ref c) = candidate
                 && c.len() < cs.len()
             {
+                // println!("{cs:?} is longer than {c:?}!");
                 continue;
             }
 
-            if cs.len() > max {
+            if cs.len() > handling.max {
                 continue;
             }
 
-            if self.check_inputs(board.clone(), &cs, spawn) {
+            if self.check_inputs(board, &cs, spawn, handling) {
                 candidate = Some(cs.clone());
 
-                if stop_at_first {
+                if handling.finesse {
+                    // println!("found first!");
                     return Some(cs);
                 }
             }
 
             for next_move in possible_moves.iter() {
+                if !self.is_input_useful(board, &cs, *next_move, spawn, handling) {
+                    continue;
+                    // println!("deemed {next_move:?} unhelpful with {cs:?}")
+                }
                 let mut ns = cs.clone();
                 ns.push(*next_move);
 

@@ -1,25 +1,36 @@
 use std::{fmt::Write, io::Write as iW, time::Instant};
 
+use clap::Parser;
+
 use crate::{
     board_parser::Tetfu,
+    caches::Caches,
     commands::{
-        fumen::fumen_command, movec::move_command, pattern::pattern_command, test::test_command,
+        finesse::finesse_command, fumen::fumen_command, movec::move_command,
+        pattern::pattern_command, test::test_command,
     },
+    data::kick::Kickset,
     grid::Grid,
+    input::DropType,
     pattern::Pattern,
     ranged::Ranged,
     text::Text,
 };
 
+#[derive(Debug)]
+pub struct Sfce {
+    pub program: Program,
+    pub caches: Caches,
+    pub buf: String,
+}
+
 #[derive(clap::Parser, Clone, Debug)]
 #[clap(disable_help_flag = true)]
-pub struct Sfce {
+pub struct Program {
     #[command(subcommand)]
     sub: SfceCommand,
     #[clap(flatten)]
     pub args: Options,
-    #[clap(skip)]
-    pub buf: String,
 }
 
 #[derive(clap::Args, Clone, Debug)]
@@ -32,10 +43,39 @@ pub struct Options {
     pub board_width: Option<usize>,
     #[arg(short = 'h')]
     pub board_height: Option<usize>,
-    #[arg(short = 'i', default_value = "4")]
-    pub max_input_count: usize,
     #[arg(short = 's', default_value = "true")]
     pub stopwatch: bool,
+    #[clap(flatten)]
+    pub handling: Handling,
+    #[arg(short = 'm', default_value = "2")]
+    pub board_margin: usize,
+    #[arg(long = "no-cache")]
+    pub no_cache: bool,
+}
+
+#[derive(clap::Args, Clone, Debug, Copy, PartialEq, Eq)]
+pub struct Handling {
+    #[arg(short = 'k', long = "kickset", default_value = "srs")]
+    /// Which kickset to use.
+    pub kickset: Kickset<'static>,
+    #[arg(short = 'y', long = "use-180")]
+    /// Whether or not the engine is allowed to perform 180-degree rotations
+    pub use_180: bool,
+    #[arg(short = 'd', long = "drop-type", default_value = "soft")]
+    /// The allowed drop type. "none" enforces hard drops, "sonic" is similar to max gravity, and "soft" is regular dropping.
+    pub drop_type: DropType,
+    #[arg(short = 'i', default_value = "4")]
+    /// The maximum amount of inputs you can do for a single piece.
+    pub max: usize,
+    #[arg(long = "das")]
+    /// Whether or not DAS is utilized, which allows you to move the piece all the way to one side in 1 input.
+    pub das: bool,
+    #[arg(short = 'f', long = "finesse")]
+    /// Whether or not to care about 100% finesse.
+    pub finesse: bool,
+    #[arg(long = "ignore")]
+    /// Whether or not to ignore the use of inputs for a placement. This may generate some impossible placements.
+    pub ignore: bool,
 }
 
 #[derive(Clone, Debug, clap::Subcommand)]
@@ -51,9 +91,15 @@ pub enum SfceCommand {
         pattern: Text<Pattern>,
         #[arg(short = 'c', default_value = "..")]
         clears: Ranged<usize>,
+        #[arg(short = 'm')]
+        minimal: bool,
     },
     Test,
     Grid {
+        #[arg(short = 't')]
+        tetfu: Text<Tetfu>,
+    },
+    Finesse {
         #[arg(short = 't')]
         tetfu: Text<Tetfu>,
     },
@@ -90,44 +136,70 @@ pub enum PatternCli {
 }
 
 impl Sfce {
+    pub fn handling(&self) -> Handling {
+        self.program.args.handling
+    }
+
+    pub fn new() -> Self {
+        let program = Program::parse();
+        Self {
+            program,
+            caches: Caches::default(),
+            buf: String::new(),
+        }
+    }
+
     pub fn run(&mut self) -> anyhow::Result<()> {
-      let i = Instant::now();
+        if !self.program.args.no_cache {
+            self.load_state()?;
+        }
+        let i = Instant::now();
         // dbg!(&self);
-        match self.sub.clone() {
+        match self.program.sub.clone() {
             SfceCommand::Fumen(l) => fumen_command(self, l)?,
             SfceCommand::Pattern(l) => pattern_command(self, l)?,
             SfceCommand::Move {
                 tetfu,
                 pattern,
                 clears,
-            } => move_command(self, tetfu.contents(), pattern.contents(), clears)?,
-            SfceCommand::Grid { tetfu } => write!(self.buf, "{}", tetfu.grid())?,
+                minimal,
+            } => move_command(self, tetfu.contents(), pattern.contents(), clears, minimal)?,
+            SfceCommand::Finesse { tetfu } => finesse_command(self, tetfu.contents())?,
+            SfceCommand::Grid { tetfu } => write!(self.buf, "{}", tetfu.grid().as_deoptimized())?,
             SfceCommand::Test => test_command(self)?,
         }
 
-        if let Some(s) = &self.args.output {
-            println!("wrote {} bytes to path", self.buf.as_bytes().len());
+        if let Some(s) = &self.program.args.output {
+            println!("--> wrote {} bytes to path", self.buf.as_bytes().len());
             std::fs::write(s, self.buf.clone())?;
         } else {
             writeln!(std::io::stdout(), "{}", self.buf)?;
         }
 
-        if self.args.stopwatch {
-          println!("--> took {:3} seconds", i.elapsed().as_secs_f64())
+        if self.program.args.stopwatch {
+            println!("--> took {:.3} seconds", i.elapsed().as_secs_f64())
         }
+
+        self.save_state()?;
 
         Ok(())
     }
 
     pub fn tetfu(&self, f: Grid) -> String {
-        if let Some(t) = self.args.link_type {
-            if t == 'q' {
+        if let Some(t) = self.program.args.link_type {
+            if t.is_lowercase() {
+                format!("{t}{}", &f.fumen().encode()[1..])
+            } else if t == 'Q' {
                 format!(
                     "https://qv.rqft.workers.dev/tools/board-editor?{}",
                     f.fumen().encode()
                 )
             } else {
-                format!("https://harddrop.com/fumen?{t}{}", &f.fumen().encode()[1..])
+                format!(
+                    "https://harddrop.com/fumen?{}{}",
+                    t.to_lowercase(),
+                    &f.fumen().encode()[1..]
+                )
             }
         } else {
             f.to_string()
@@ -135,14 +207,22 @@ impl Sfce {
     }
 
     pub fn resize(&self, mut f: Grid) -> Grid {
-        if let Some(w) = self.args.board_width {
+        if let Some(w) = self.program.args.board_width {
             f.set_width(w);
         }
 
-        if let Some(h) = self.args.board_height {
+        if let Some(h) = self.program.args.board_height {
             f.set_height(h);
         }
 
+        f.set_margin(self.program.args.board_margin);
+
         f
+    }
+}
+
+impl Default for Sfce {
+    fn default() -> Self {
+        Self::new()
     }
 }

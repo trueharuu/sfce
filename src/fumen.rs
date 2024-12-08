@@ -1,6 +1,6 @@
 use fumen::{CellColor, Fumen};
 
-use crate::{grid::Grid, board::Board, piece::Piece};
+use crate::{board::Board, grid::Grid, piece::Piece};
 
 pub fn grid_to_fumen(grid: Grid) -> Fumen {
     let mut f = Fumen::default();
@@ -14,7 +14,7 @@ pub fn grid_to_fumen(grid: Grid) -> Fumen {
             }
         }
         p.field = field;
-        p.comment = page.1.clone();
+        p.comment = page.comment.clone();
     }
 
     f
@@ -27,8 +27,9 @@ pub fn fumen_to_grid(fumen: Fumen) -> Grid {
             .iter()
             .map(|x| {
                 // dbg!(&x);
-                Board(
-                    x.field
+                Board {
+                    data: x
+                        .field
                         .iter()
                         .map(|x| {
                             x.iter()
@@ -46,8 +47,9 @@ pub fn fumen_to_grid(fumen: Fumen) -> Grid {
                                 .collect::<Vec<_>>()
                         })
                         .collect::<Vec<_>>(),
-                    x.comment.clone(),
-                )
+                    comment: x.comment.clone(),
+                    margin: 0,
+                }
             })
             .collect::<Vec<_>>(),
     )

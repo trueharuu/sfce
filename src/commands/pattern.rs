@@ -1,7 +1,7 @@
 use std::fmt::Write;
 
 use crate::{
-    program::{PatternCli, Sfce},
+    program::{PatternCli,Sfce},
     traits::CollectVec,
 };
 
