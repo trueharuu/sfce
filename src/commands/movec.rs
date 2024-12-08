@@ -97,7 +97,7 @@ fn is_doable(sfce: &mut Sfce, board: &Board, placements: &[Placement]) -> bool {
     let mut s = board.clone().skimmed();
     for p in placements {
         let m = sfce.is_placement_possible(&s, *p);
-        println!("[{m:.1}] placing {} {:?} on {s}", p.piece(), p.rotation());
+        // println!("[{m:.1}] placing {} {:?} on {s}", p.piece(), p.rotation());
         if m {
             s.place(*p);
             s.skim();
@@ -109,7 +109,7 @@ fn is_doable(sfce: &mut Sfce, board: &Board, placements: &[Placement]) -> bool {
     true
 }
 
-fn all_placements_of_piece(_: &mut Sfce, board: &Board, piece: Piece) -> Vec<Placement> {
+fn all_placements_of_piece(s: &mut Sfce, board: &Board, piece: Piece) -> Vec<Placement> {
     let mut m = vec![];
     for x in 0..board.width() {
         for y in 0..board.height() {
@@ -117,7 +117,7 @@ fn all_placements_of_piece(_: &mut Sfce, board: &Board, piece: Piece) -> Vec<Pla
                 let p = Placement::new(piece, x, y, rotation);
 
                 if board.clone().skimmed().is_valid_placement(p, false) {
-                    println!("{p:?} on board was valid!");
+                    // println!("{p:?} on board was valid!");
                     m.push(p);
                 }
             }

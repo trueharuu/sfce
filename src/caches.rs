@@ -3,7 +3,6 @@ use std::collections::HashMap;
 use crate::{
     board::{Bits, Board},
     input::Key,
-    piece::Piece,
     placement::Placement,
     program::Sfce,
 };
@@ -11,10 +10,7 @@ use crate::{
 #[derive(Debug, Default)]
 pub struct Caches {
     pub is_placement_possible_store: HashMap<(Bits, Placement), bool>,
-    // pub is_valid_placement_store: HashMap<(BitBoard, Placement, bool), bool>,
     pub finesse_store: HashMap<(Placement, Bits), Vec<Key>>,
-    pub placements_of_store: HashMap<(Board, Piece), Vec<Board>>,
-    pub placements_of_many_store: HashMap<(Board, Vec<Piece>), Vec<Board>>,
 }
 
 impl Sfce {
@@ -47,21 +43,8 @@ impl Sfce {
         placement: Placement,
         allow_floating: bool,
     ) -> bool {
-        // let f = board.fast();
-
-        // if let Some(s) =
-        //     self.caches
-        //         .is_valid_placement_store
-        //         .get(&(f.clone(), placement, allow_floating))
-        // {
-        //     *s
-        // } else {
-        
-        // self.caches
-        //     .is_valid_placement_store
-        //     .insert((f, placement, allow_floating), valid);
+        // this previously was cached but it took up 200mb of storage
         board.is_valid_placement(placement, allow_floating)
-        // }
     }
 
     pub fn finesse(&mut self, placement: Placement, board: &Board) -> Option<Vec<Key>> {

@@ -1,5 +1,6 @@
 use std::fmt::Write;
 
+use itertools::Itertools;
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -26,6 +27,7 @@ pub fn command(f: &mut Sfce, tetfu: &Tetfu) -> anyhow::Result<()> {
         if let Some(k) = keys {
             let v = i.show_inputs(&k);
             write!(f.buf, "{}", f.tetfu(&v))?;
+            println!("{}", k.iter().map(|x| format!("{x:?}")).join(", "));
         } else {
             eprintln!("this placement is impossible");
         }

@@ -3,7 +3,8 @@ use std::{fmt::Write, io::Write as iW, time::Instant};
 use clap::Parser;
 
 use crate::{
-    board_parser::Tetfu, caches::Caches, commands, data::kick::Kickset, grid::Grid, input::DropType, pattern::Pattern, ranged::Ranged, text::Text
+    board_parser::Tetfu, caches::Caches, commands, data::kick::Kickset, grid::Grid,
+    input::DropType, pattern::Pattern, ranged::Ranged, text::Text,
 };
 
 #[derive(Debug)]
@@ -177,7 +178,9 @@ impl Sfce {
             println!("--> took {:.3} seconds", i.elapsed().as_secs_f64());
         }
 
-        self.save_state()?;
+        if !self.program.args.no_cache {
+            self.save_state()?;
+        }
 
         Ok(())
     }
