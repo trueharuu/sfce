@@ -17,29 +17,32 @@ pub fn command(f: &mut Sfce, tetfu: &Tetfu) -> anyhow::Result<()> {
         .unwrap_or_default();
 
     let og = board.clone().only_gray();
-    // println!("{board}");
     let placement = identify_placement(&board);
 
-    if let Some(p) = placement {
-        // eprintln!("{p:?}");
+    let mut hit = false;
+    for p in placement {
+        println!("identified {p:?}");
         let keys = f.finesse(p, &og);
         let mut i = Input::new(&og, p.piece(), board.spawn(), Rotation::North, f.handling());
         if let Some(k) = keys {
             let v = i.show_inputs(&k);
             write!(f.buf, "{}", f.tetfu(&v))?;
             println!("{}", k.iter().map(|x| format!("{x:?}")).join(", "));
-        } else {
-            eprintln!("this placement is impossible");
+            hit = true;
+            break;
         }
-    } else {
-        println!("no piece is placed");
+    }
+
+    if !hit {
+        eprintln!("no placement was possible");
     }
     // println!("{:?}", placement);
 
     Ok(())
 }
 
-fn identify_placement(board: &Board) -> Option<Placement> {
+fn identify_placement(board: &Board) -> Vec<Placement> {
+    let mut placements = vec![];
     let mut colored_cells = vec![];
     for x in 0..board.width() {
         for y in 0..board.height() {
@@ -52,7 +55,7 @@ fn identify_placement(board: &Board) -> Option<Placement> {
 
     // println!("{colored_cells:?}");
     if colored_cells.len() != 4 {
-        return None;
+        return vec![];
     }
 
     for (x, y, piece) in colored_cells {
@@ -67,10 +70,10 @@ fn identify_placement(board: &Board) -> Option<Placement> {
             // println!();
 
             if trial.with_placement(p) == *board {
-                return Some(p);
+                placements.push(p);
             }
         }
     }
 
-    None
+    placements
 }

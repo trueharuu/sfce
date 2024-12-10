@@ -53,7 +53,17 @@ impl Board {
 
     #[must_use]
     pub fn spawn(&self) -> (usize, usize) {
-        (self.width() / 2, self.total_height() - self.margin)
+        (self.spawn_x(), self.spawn_y())
+    }
+
+    #[must_use]
+    pub fn spawn_x(&self) -> usize {
+        self.width() / 2 - 1
+    }
+
+    #[must_use]
+    pub fn spawn_y(&self) -> usize {
+        self.total_height() - self.margin
     }
 
     #[must_use]
@@ -226,8 +236,22 @@ impl Board {
     }
 
     #[must_use]
+    pub fn is_valid_placement_with_skim(&self, placement: Placement, allow_floating: bool) -> bool {
+        let mut sk = self.clone();
+
+        sk.clone()
+            .skimmed()
+            .is_valid_placement(placement, allow_floating)
+    }
+
+    #[must_use]
     pub fn is_in_bounds(&self, x: usize, y: usize) -> bool {
-        (0..self.width()).contains(&x) && (0..self.height()).contains(&y)
+        (0..self.width()).contains(&x) && (0..self.total_height()).contains(&y)
+    }
+
+    #[must_use]
+    pub fn is_in_margin(&self, x: usize, y: usize) -> bool {
+        (0..self.width()).contains(&x) && (self.height()..).contains(&y)
     }
 
     pub fn place(&mut self, placement: Placement) {

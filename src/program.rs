@@ -191,10 +191,7 @@ impl Sfce {
             if t.is_lowercase() {
                 format!("{t}{}", &f.fumen().encode()[1..])
             } else if t == 'Q' {
-                format!(
-                    "https://qv.rqft.workers.dev/tools/board-editor?{}",
-                    f.fumen().encode()
-                )
+                format!("https://qv.rqft.workers.dev/board?{}", f.fumen().encode())
             } else {
                 format!(
                     "https://harddrop.com/fumen?{}{}",

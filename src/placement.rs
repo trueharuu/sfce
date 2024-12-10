@@ -1,5 +1,6 @@
 use std::collections::{HashSet, VecDeque};
 
+use indicatif::ProgressStyle;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -13,31 +14,38 @@ use crate::{
 pub struct Placement(Piece, usize, usize, Rotation);
 
 impl Placement {
-    #[must_use] pub fn new(piece: Piece, x: usize, y: usize, rotation: Rotation) -> Self {
+    #[must_use]
+    pub fn new(piece: Piece, x: usize, y: usize, rotation: Rotation) -> Self {
         Placement(piece, x, y, rotation)
     }
 
-    #[must_use] pub fn piece(&self) -> Piece {
+    #[must_use]
+    pub fn piece(&self) -> Piece {
         self.0
     }
 
-    #[must_use] pub fn x(&self) -> usize {
+    #[must_use]
+    pub fn x(&self) -> usize {
         self.1
     }
 
-    #[must_use] pub fn y(&self) -> usize {
+    #[must_use]
+    pub fn y(&self) -> usize {
         self.2
     }
 
-    #[must_use] pub fn location(&self) -> (usize, usize) {
+    #[must_use]
+    pub fn location(&self) -> (usize, usize) {
         (self.1, self.2)
     }
 
-    #[must_use] pub fn rotation(&self) -> Rotation {
+    #[must_use]
+    pub fn rotation(&self) -> Rotation {
         self.3
     }
 
-    #[must_use] pub fn at(mut self, (x, y): (usize, usize)) -> Self {
+    #[must_use]
+    pub fn at(mut self, (x, y): (usize, usize)) -> Self {
         self.move_to((x, y));
         self
     }
@@ -59,7 +67,8 @@ impl Placement {
         self.2 = y;
     }
 
-    #[must_use] pub fn check_inputs(
+    #[must_use]
+    pub fn check_inputs(
         self,
         board: &Board,
         keys: &[Key],
@@ -72,7 +81,8 @@ impl Placement {
         self == input.placement()
     }
 
-    #[must_use] pub fn is_input_useful(
+    #[must_use]
+    pub fn is_input_useful(
         self,
         board: &Board,
         orig_keys: &[Key],
@@ -86,14 +96,16 @@ impl Placement {
         i.can(key)
     }
 
-    #[must_use] pub fn is_doable(&self, board: &Board, spawn: (usize, usize), mut handling: Handling) -> bool {
+    #[must_use]
+    pub fn is_doable(&self, board: &Board, spawn: (usize, usize), mut handling: Handling) -> bool {
         handling.finesse = false;
         self.inputs(board, spawn, handling).is_some()
     }
 }
 
 impl Placement {
-    #[must_use] pub fn finesse(
+    #[must_use]
+    pub fn finesse(
         self,
         board: &Board,
         spawn: (usize, usize),
@@ -102,7 +114,9 @@ impl Placement {
         handling.finesse = true;
         self.inputs(board, spawn, handling)
     }
-    #[must_use] pub fn inputs(
+
+    #[must_use]
+    pub fn inputs(
         self,
         board: &Board,
         spawn: (usize, usize),
@@ -135,10 +149,19 @@ impl Placement {
         let mut v2 = HashSet::new();
 
         let mut candidate: Option<Vec<Key>> = None;
+        // let qbar = indicatif::ProgressBar::no_length();
+        // let style = ProgressStyle::default_spinner()
+        // .template("{spinner} {prefix} {msg:.bold}")
+        // .unwrap()
+        // .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+        // qbar.set_prefix("Testing input sequence");
+        // qbar.set_style(style);
         while let Some(current_seq) = queue.pop_front() {
             if v2.contains(&current_seq) {
                 continue;
             }
+
+            // println!("{current_seq:?}");
             v2.insert(current_seq.clone());
             // let i = Input::new(board, self.piece, spawn, Rotation::North, handling);
             // let cs = i.remove_all_noops(&current_seq);
@@ -148,30 +171,29 @@ impl Placement {
             //     continue;
             // }
             if let Some(ref c) = candidate
-                && c.len() < cs.len()
+                && c.len() <= cs.len()
             {
-                // println!("{cs:?} is longer than {c:?}!");
                 continue;
             }
 
+            // qbar.set_message(format!("{cs:?}"));
+            // qbar.tick();
             if cs.len() > handling.max {
                 continue;
             }
 
             if self.check_inputs(board, &cs, spawn, handling) {
                 candidate = Some(cs.clone());
-
-                if handling.finesse {
-                    // println!("found first!");
+                if !handling.finesse {
                     return Some(cs);
                 }
             }
 
             for next_move in &possible_moves {
-                if !self.is_input_useful(board, &cs, *next_move, spawn, handling) {
-                    continue;
-                    // println!("deemed {next_move:?} unhelpful with {cs:?}")
-                }
+                // if !self.is_input_useful(board, &cs, *next_move, spawn, handling) {
+                //     continue;
+                //     // println!("deemed {next_move:?} unhelpful with {cs:?}")
+                // }
                 let mut ns = cs.clone();
                 ns.push(*next_move);
 
@@ -181,6 +203,8 @@ impl Placement {
                 }
             }
         }
+
+        // qbar.finish_and_clear();
 
         candidate
     }

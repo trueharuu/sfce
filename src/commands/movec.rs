@@ -38,8 +38,15 @@ pub fn command(
         .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
     qbar.set_prefix("Generating placements for queue");
     qbar.set_style(style);
+  
     for queue in pattern.queues() {
-        qbar.set_message(queue.iter().map(std::string::ToString::to_string).vec().join(""));
+        qbar.set_message(
+            queue
+                .iter()
+                .map(std::string::ToString::to_string)
+                .vec()
+                .join(""),
+        );
         qbar.inc(1);
 
         let apoq = all_placements_of_queue(f, &board, queue.pieces());
@@ -49,9 +56,12 @@ pub fn command(
             .filter(|x| clears.contains(&x.1.line_clears()))
             .fully_dedup_by(|(x, _), (y, _)| {
                 // println!("{px:?} = {py:?}");
-                minimal && x.iter().map(super::super::placement::Placement::piece).eq(y.iter().map(super::super::placement::Placement::piece))
+                minimal
+                    && x.iter()
+                        .map(Placement::piece)
+                        .eq(y.iter().map(Placement::piece))
             })
-            .fully_dedup_by_key(|x| x.1.clone())
+            // .fully_dedup_by_key(|x| x.1.clone())
             .filter(|x| is_doable(f, &board, x.0))
             .map(|x| x.1);
         // println!("{:?}", ap.vec())
@@ -77,7 +87,7 @@ fn all_placements_of_queue(sfce: &mut Sfce, board: &Board, queue: &[Piece]) -> V
 
     for p in placements {
         let mut s = board.clone();
-        s.place(p);
+        s.skim_place(p);
         let sub_placements = all_placements_of_queue(sfce, &s, remaining_queue);
 
         for mut sr in sub_placements {
@@ -96,8 +106,9 @@ fn is_doable(sfce: &mut Sfce, board: &Board, placements: &[Placement]) -> bool {
 
     let mut s = board.clone().skimmed();
     for p in placements {
-        let m = sfce.is_placement_possible(&s, *p);
-        // println!("[{m:.1}] placing {} {:?} on {s}", p.piece(), p.rotation());
+        // println!("testing placement {p:?}");
+        let m = p.is_doable(&s.clone().skimmed(), s.spawn(), sfce.handling());
+        // println!("[{m:.1}] placing {p:?} on {s}");
         if m {
             s.place(*p);
             s.skim();
@@ -109,14 +120,14 @@ fn is_doable(sfce: &mut Sfce, board: &Board, placements: &[Placement]) -> bool {
     true
 }
 
-fn all_placements_of_piece(s: &mut Sfce, board: &Board, piece: Piece) -> Vec<Placement> {
+fn all_placements_of_piece(_: &mut Sfce, board: &Board, piece: Piece) -> Vec<Placement> {
     let mut m = vec![];
     for x in 0..board.width() {
         for y in 0..board.height() {
             for rotation in Rotation::iter() {
                 let p = Placement::new(piece, x, y, rotation);
 
-                if board.clone().skimmed().is_valid_placement(p, false) {
+                if board.is_valid_placement_with_skim(p, false) {
                     // println!("{p:?} on board was valid!");
                     m.push(p);
                 }

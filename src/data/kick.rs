@@ -1,40 +1,59 @@
 use std::str::FromStr;
 
-use crate::piece::{
-    Piece::{self, I, J, L, O, S, T, Z},
-    Rotation::{self, East as e, North as n, South as s, West as w},
+use crate::{
+    piece::{
+        Piece::{self, I, J, L, O, S, T, Z},
+        Rotation::{self, East as e, North as n, South as s, West as w},
+    },
+    traits::CollectVec,
 };
 
 // TODO: add kicktables for SRS, SRS+, SRS-X, SRS-jstris
 pub type RawKickset<'a> = &'a [(Piece, Rotation, Rotation, &'a [(isize, isize)])];
+pub type RawOffsets<'a> = &'a [(Piece, Rotation, &'a [(isize, isize)])];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Kickset<'a> {
-    raw: RawKickset<'a>,
+    kick: RawKickset<'a>,
+    offset: RawOffsets<'a>,
 }
 
 impl<'a> Kickset<'a> {
-    #[must_use] pub fn raw(raw: RawKickset<'a>) -> Self {
-        Self { raw }
+    #[must_use]
+    pub fn raw(kick: RawKickset<'a>, offset: RawOffsets<'a>) -> Self {
+        Self { kick, offset }
     }
-    #[must_use] pub fn get(
+    #[must_use]
+    pub fn get(
         &self,
         piece: Piece,
         initial_rotation: Rotation,
         final_rotation: Rotation,
-    ) -> &'a [(isize, isize)] {
-        self.raw
+    ) -> Vec<(isize, isize)> {
+        let io = self
+            .offset
             .iter()
-            .find(|x| x.0 == piece && x.1 == initial_rotation && x.2 == final_rotation)
-            .map_or(&[(0, 0)], |x| x.3)
+            .find(|x| x.0 == piece && x.1 == initial_rotation)
+            .unwrap();
+        let fo = self
+            .offset
+            .iter()
+            .find(|x| x.0 == piece && x.1 == final_rotation)
+            .unwrap();
+        io.2.iter()
+            .zip(fo.2.iter())
+            .map(|((ix, iy), (fx, fy))| (ix - fx, iy - fy))
+            .vec()
     }
 
-    #[must_use] pub fn none() -> Self {
-      Self::raw(NONE)
+    #[must_use]
+    pub fn none() -> Self {
+        Self::raw(NONE, DEFAULT_OFFSETS)
     }
 
-    #[must_use] pub fn srs() -> Self {
-      Self::raw(SRS)
+    #[must_use]
+    pub fn srs() -> Self {
+        Self::raw(SRS, DEFAULT_OFFSETS)
     }
 }
 
@@ -52,7 +71,7 @@ impl<'a> FromStr for Kickset<'a> {
 
 macro_rules! kicks {
   ($($p:ident $l:ident $r:ident $(($q:expr, $v:expr))* ;)*) => {
-      &[$(($p, $l, $r, &[$(($q, $v),)*]),)*]
+      &[$(($p, $l, $r, &[$(($q, $v),)*], ),)*]
   };
 }
 
@@ -121,3 +140,34 @@ pub const SRS: RawKickset = kicks!(
   I w n (0, 0) (1, 0) (-2, 0) (1, -2) (-2, 1);
   I n w (0, 0) (-1, 0) (2, 0) (-1, 2) (2, -1);
 );
+
+pub const DEFAULT_OFFSETS: RawOffsets = &[
+    (J, n, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
+    (J, e, &[(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]),
+    (J, s, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
+    (J, w, &[(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]),
+    (L, n, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
+    (L, e, &[(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]),
+    (L, s, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
+    (L, w, &[(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]),
+    (S, n, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
+    (S, e, &[(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]),
+    (S, s, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
+    (S, w, &[(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]),
+    (T, n, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
+    (T, e, &[(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]),
+    (T, s, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
+    (T, w, &[(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]),
+    (Z, n, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
+    (Z, e, &[(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]),
+    (Z, s, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
+    (Z, w, &[(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]),
+    (I, n, &[(0, 0), (-1, 0), (2, 0), (-1, 0), (2, 0)]),
+    (I, e, &[(-1, 0), (0, 0), (0, 0), (0, 1), (0, -2)]),
+    (I, s, &[(-1, 1), (1, 1), (-2, 1), (1, 0), (-2, 0)]),
+    (I, w, &[(0, 1), (0, 1), (0, 1), (0, -1), (0, 2)]),
+    (O, n, &[(0, 0)]),
+    (O, e, &[(0, -1)]),
+    (O, s, &[(-1, -1)]),
+    (O, w, &[(-1, 0)]),
+];

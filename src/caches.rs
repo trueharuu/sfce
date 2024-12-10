@@ -64,7 +64,7 @@ impl Sfce {
             // println!("cache hit!");
             Some(s.clone())
         } else {
-            let inputs = placement.inputs(board, board.spawn(), self.handling());
+            let inputs = placement.finesse(board, board.spawn(), self.handling());
             if let Some(i) = inputs {
                 self.caches
                     .is_placement_possible_store

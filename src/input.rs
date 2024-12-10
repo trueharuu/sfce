@@ -145,8 +145,8 @@ impl<'a> Input<'a> {
         let tests = self.handling.kickset.get(self.piece, ro, rn);
 
         for (tx, ty) in tests {
-            if let Some(dx) = p.x().checked_add_signed(*tx)
-                && let Some(dy) = p.y().checked_add_signed(*ty)
+            if let Some(dx) = p.x().checked_add_signed(tx)
+                && let Some(dy) = p.y().checked_add_signed(ty)
             {
                 let mut np = p;
                 np.move_to((dx, dy));
@@ -169,8 +169,8 @@ impl<'a> Input<'a> {
         let tests = self.handling.kickset.get(self.piece, ro, rn);
 
         for (tx, ty) in tests {
-            if let Some(dx) = p.x().checked_add_signed(*tx)
-                && let Some(dy) = p.y().checked_add_signed(*ty)
+            if let Some(dx) = p.x().checked_add_signed(tx)
+                && let Some(dy) = p.y().checked_add_signed(ty)
             {
                 let mut np = p;
                 np.move_to((dx, dy));
@@ -193,8 +193,8 @@ impl<'a> Input<'a> {
         let tests = self.handling.kickset.get(self.piece, ro, rn);
 
         for (tx, ty) in tests {
-            if let Some(dx) = p.x().checked_add_signed(*tx)
-                && let Some(dy) = p.y().checked_add_signed(*ty)
+            if let Some(dx) = p.x().checked_add_signed(tx)
+                && let Some(dy) = p.y().checked_add_signed(ty)
             {
                 let mut np = p;
                 np.move_to((dx, dy));
@@ -250,7 +250,7 @@ impl<'a> Input<'a> {
 
     pub fn show_inputs(&mut self, keys: &[Key]) -> Grid {
         let mut g = Grid::default();
-        g.add_page(self.board.clone());
+        // g.add_page(self.board.clone());
         // println!("{:?}", self.placement());
         g.add_page(self.place().with_comment("Spawn"));
         for key in keys {
