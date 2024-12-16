@@ -181,23 +181,17 @@ impl Sfce {
         let i = Instant::now();
         // dbg!(&self);
         match self.program.sub.clone() {
-            SfceCommand::Fumen(l) => commands::fumen::command(self, l)?,
-            SfceCommand::Pattern(l) => commands::pattern::command(self, l)?,
+            SfceCommand::Fumen(l) => self.fumen_commnad(l)?,
+            SfceCommand::Pattern(l) => self.pattern_command(l)?,
             SfceCommand::Move {
                 tetfu,
                 pattern,
                 clears,
                 minimal,
-            } => commands::movec::command(
-                self,
-                &tetfu.contents(),
-                &pattern.contents(),
-                clears,
-                minimal,
-            )?,
-            SfceCommand::Finesse { tetfu } => commands::finesse::command(self, &tetfu.contents())?,
+            } => self.move_command(&tetfu.contents(), &pattern.contents(), clears, minimal)?,
+            SfceCommand::Finesse { tetfu } => self.finesse_command(&tetfu.contents())?,
             SfceCommand::Grid { tetfu } => write!(self.buf, "{}", tetfu.grid().as_deoptimized())?,
-            SfceCommand::Test => commands::test::command(self)?,
+            SfceCommand::Test => self.test_command()?,
         }
 
         if let Some(s) = &self.program.args.output {

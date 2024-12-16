@@ -145,17 +145,17 @@ impl<'a> Input<'a> {
         let tests = self.handling.kickset.get(self.piece, ro, rn);
 
         for (tx, ty) in tests {
-            if let Some(dx) = p.x().checked_add_signed(tx)
-                && let Some(dy) = p.y().checked_add_signed(ty)
-            {
-                let mut np = p;
-                np.move_to((dx, dy));
-                np.set_rotation(rn);
-                if self.is_valid(np) {
-                    self.location.0 = dx;
-                    self.location.1 = dy;
-                    self.rotation = rn;
-                    return;
+            if let Some(dx) = p.x().checked_add_signed(tx) {
+                if let Some(dy) = p.y().checked_add_signed(ty) {
+                    let mut np = p;
+                    np.move_to((dx, dy));
+                    np.set_rotation(rn);
+                    if self.is_valid(np) {
+                        self.location.0 = dx;
+                        self.location.1 = dy;
+                        self.rotation = rn;
+                        return;
+                    }
                 }
             }
         }
@@ -169,17 +169,17 @@ impl<'a> Input<'a> {
         let tests = self.handling.kickset.get(self.piece, ro, rn);
 
         for (tx, ty) in tests {
-            if let Some(dx) = p.x().checked_add_signed(tx)
-                && let Some(dy) = p.y().checked_add_signed(ty)
-            {
-                let mut np = p;
-                np.move_to((dx, dy));
-                np.set_rotation(rn);
-                if self.is_valid(np) {
-                    self.location.0 = dx;
-                    self.location.1 = dy;
-                    self.rotation = rn;
-                    return;
+            if let Some(dx) = p.x().checked_add_signed(tx) {
+                if let Some(dy) = p.y().checked_add_signed(ty) {
+                    let mut np = p;
+                    np.move_to((dx, dy));
+                    np.set_rotation(rn);
+                    if self.is_valid(np) {
+                        self.location.0 = dx;
+                        self.location.1 = dy;
+                        self.rotation = rn;
+                        return;
+                    }
                 }
             }
         }
@@ -193,17 +193,17 @@ impl<'a> Input<'a> {
         let tests = self.handling.kickset.get(self.piece, ro, rn);
 
         for (tx, ty) in tests {
-            if let Some(dx) = p.x().checked_add_signed(tx)
-                && let Some(dy) = p.y().checked_add_signed(ty)
-            {
-                let mut np = p;
-                np.move_to((dx, dy));
-                np.set_rotation(rn);
-                if self.is_valid(np) {
-                    self.location.0 = dx;
-                    self.location.1 = dy;
-                    self.rotation = rn;
-                    return;
+            if let Some(dx) = p.x().checked_add_signed(tx) {
+                if let Some(dy) = p.y().checked_add_signed(ty) {
+                    let mut np = p;
+                    np.move_to((dx, dy));
+                    np.set_rotation(rn);
+                    if self.is_valid(np) {
+                        self.location.0 = dx;
+                        self.location.1 = dy;
+                        self.rotation = rn;
+                        return;
+                    }
                 }
             }
         }

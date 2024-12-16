@@ -1,4 +1,3 @@
-#![feature(let_chains, is_none_or, int_roundings)]
 #![warn(clippy::pedantic)]
 #![allow(clippy::missing_errors_doc, clippy::missing_panics_doc, clippy::struct_excessive_bools)]
 

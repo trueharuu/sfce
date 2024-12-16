@@ -209,11 +209,13 @@ impl Board {
                     }
 
                     // check the cell below
-                    if let Some(ry) = dy.checked_sub(1)
-                        && s.is_in_bounds(dx, ry)
-                    {
-                        let cell_below = s.data[dy - 1][dx];
-                        trials.push(cell_below);
+                    if let Some(ry) = dy.checked_sub(1) {
+                        if s.is_in_bounds(dx, ry) {
+                            let cell_below = s.data[dy - 1][dx];
+                            trials.push(cell_below);
+                        } else {
+                            trials.push(Piece::D)
+                        }
                     } else {
                         trials.push(Piece::D);
                     }
@@ -264,10 +266,10 @@ impl Board {
             for (ox, oy) in pm.2 {
                 let dx = placement.x().checked_add_signed(*ox);
                 let dy = placement.y().checked_add_signed(*oy);
-                if let (Some(dx), Some(dy)) = (dx, dy)
-                    && self.is_in_bounds(dx, dy)
-                {
-                    self.data[dy][dx] = placement.piece();
+                if let (Some(dx), Some(dy)) = (dx, dy) {
+                    if self.is_in_bounds(dx, dy) {
+                        self.data[dy][dx] = placement.piece();
+                    }
                 }
             }
         }
