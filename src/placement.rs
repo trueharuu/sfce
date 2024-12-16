@@ -1,11 +1,15 @@
-use std::collections::{HashSet, VecDeque};
+use std::{
+    collections::VecDeque,
+    sync::{Arc, Mutex},
+};
 
-use indicatif::ProgressStyle;
+use dashmap::DashSet;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 
 use crate::{
     board::Board,
-    input::{DropType, Input, Key},
+    input::{Input, Key},
     piece::{Piece, Rotation},
     program::Handling,
 };
@@ -122,90 +126,73 @@ impl Placement {
         spawn: (usize, usize),
         handling: Handling,
     ) -> Option<Vec<Key>> {
-        let mut visited = HashSet::new();
-        let mut queue = VecDeque::new();
+        let visited = Arc::new(DashSet::new());
+        let candidate: Arc<Mutex<Option<Vec<Key>>>> = Arc::new(Mutex::new(None));
+        let possible_moves = handling.possible_moves();
 
+        let mut queue = VecDeque::new();
         queue.push_back(Vec::new());
 
-        let mut possible_moves = vec![Key::MoveLeft, Key::MoveRight, Key::CW, Key::CCW];
+        while !queue.is_empty() {
+            let batch: Vec<Vec<Key>> = queue.drain(0..queue.len()).collect();
 
-        if handling.das {
-            possible_moves.insert(0, Key::DasRight);
-            possible_moves.insert(0, Key::DasLeft);
-        }
+            let new_sequences: Vec<Vec<Key>> = batch
+                .into_par_iter()
+                .flat_map(|current_seq| {
+                    let mut local_new_sequences = Vec::new();
 
-        if handling.use_180 {
-            possible_moves.push(Key::Flip);
-        }
+                    if visited.contains(&current_seq) {
+                        return local_new_sequences;
+                    }
 
-        if handling.drop_type == DropType::Sonic || handling.drop_type == DropType::Soft {
-            possible_moves.push(Key::SonicDrop);
-        }
+                    visited.insert(current_seq.clone());
 
-        if handling.drop_type == DropType::Soft {
-            possible_moves.push(Key::SoftDrop);
-        }
+                    if let Some(ref c) = *candidate.lock().unwrap() {
+                        if c.len() <= current_seq.len() {
+                            return local_new_sequences;
+                        }
+                    }
 
-        let mut v2 = HashSet::new();
+                    if current_seq.len() > handling.max {
+                        return local_new_sequences;
+                    }
 
-        let mut candidate: Option<Vec<Key>> = None;
-        // let qbar = indicatif::ProgressBar::no_length();
-        // let style = ProgressStyle::default_spinner()
-        // .template("{spinner} {prefix} {msg:.bold}")
-        // .unwrap()
-        // .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
-        // qbar.set_prefix("Testing input sequence");
-        // qbar.set_style(style);
-        while let Some(current_seq) = queue.pop_front() {
-            if v2.contains(&current_seq) {
-                continue;
-            }
+                    if self.check_inputs(board, &current_seq, spawn, handling) {
+                        let mut candidate_guard = candidate.lock().unwrap();
+                        if candidate_guard.is_none()
+                            || current_seq.len() < candidate_guard.as_ref().unwrap().len()
+                        {
+                            *candidate_guard = Some(current_seq.clone());
+                            if !handling.finesse {
+                                return vec![];
+                            }
+                        }
+                    }
 
-            // println!("{current_seq:?}");
-            v2.insert(current_seq.clone());
-            // let i = Input::new(board, self.piece, spawn, Rotation::North, handling);
-            // let cs = i.remove_all_noops(&current_seq);
-            let cs = current_seq;
-            // v2.insert(cs.clone());
-            // if i.has_noops(&cs) {
-            //     continue;
-            // }
-            if let Some(ref c) = candidate
-                && c.len() <= cs.len()
-            {
-                continue;
-            }
+                    for next_move in &possible_moves {
+                        let mut new_seq = current_seq.clone();
+                        new_seq.push(*next_move);
 
-            // qbar.set_message(format!("{cs:?}"));
-            // qbar.tick();
-            if cs.len() > handling.max {
-                continue;
-            }
+                        if !visited.contains(&new_seq) {
+                            local_new_sequences.push(new_seq);
+                        }
+                    }
 
-            if self.check_inputs(board, &cs, spawn, handling) {
-                candidate = Some(cs.clone());
-                if !handling.finesse {
-                    return Some(cs);
-                }
-            }
+                    local_new_sequences
+                })
+                .collect();
 
-            for next_move in &possible_moves {
-                // if !self.is_input_useful(board, &cs, *next_move, spawn, handling) {
-                //     continue;
-                //     // println!("deemed {next_move:?} unhelpful with {cs:?}")
-                // }
-                let mut ns = cs.clone();
-                ns.push(*next_move);
+            queue.extend(new_sequences);
 
-                if !visited.contains(&ns) {
-                    visited.insert(ns.clone());
-                    queue.push_back(ns);
-                }
+            if candidate.lock().unwrap().is_some() {
+                break;
             }
         }
 
-        // qbar.finish_and_clear();
-
-        candidate
+        Arc::try_unwrap(candidate)
+            .ok()
+            .unwrap()
+            .into_inner()
+            .unwrap()
     }
 }

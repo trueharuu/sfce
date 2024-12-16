@@ -3,8 +3,15 @@ use std::{fmt::Write, io::Write as iW, time::Instant};
 use clap::Parser;
 
 use crate::{
-    board_parser::Tetfu, caches::Caches, commands, data::kick::Kickset, grid::Grid,
-    input::DropType, pattern::Pattern, ranged::Ranged, text::Text,
+    board_parser::Tetfu,
+    caches::Caches,
+    commands,
+    data::kick::Kickset,
+    grid::Grid,
+    input::{DropType, Key},
+    pattern::Pattern,
+    ranged::Ranged,
+    text::Text,
 };
 
 #[derive(Debug)]
@@ -66,6 +73,32 @@ pub struct Handling {
     #[arg(long = "ignore")]
     /// Whether or not to ignore the use of inputs for a placement. This may generate some impossible placements.
     pub ignore: bool,
+}
+
+impl Handling {
+    #[must_use]
+    pub fn possible_moves(&self) -> Vec<Key> {
+        let mut possible_moves = vec![Key::MoveLeft, Key::MoveRight, Key::CW, Key::CCW];
+
+        if self.das {
+            possible_moves.insert(0, Key::DasRight);
+            possible_moves.insert(0, Key::DasLeft);
+        }
+
+        if self.use_180 {
+            possible_moves.push(Key::Flip);
+        }
+
+        if self.drop_type == DropType::Sonic || self.drop_type == DropType::Soft {
+            possible_moves.push(Key::SonicDrop);
+        }
+
+        if self.drop_type == DropType::Soft {
+            possible_moves.push(Key::SoftDrop);
+        }
+
+        possible_moves
+    }
 }
 
 #[derive(Clone, Debug, clap::Subcommand)]

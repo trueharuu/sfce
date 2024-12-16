@@ -229,6 +229,10 @@ impl Board {
                 return false;
             }
 
+            if !allow_floating && s.intersects_margin() {
+                return false;
+            }
+
             true
         } else {
             false
@@ -237,9 +241,7 @@ impl Board {
 
     #[must_use]
     pub fn is_valid_placement_with_skim(&self, placement: Placement, allow_floating: bool) -> bool {
-        let mut sk = self.clone();
-
-        sk.clone()
+        self.clone()
             .skimmed()
             .is_valid_placement(placement, allow_floating)
     }
@@ -251,7 +253,7 @@ impl Board {
 
     #[must_use]
     pub fn is_in_margin(&self, x: usize, y: usize) -> bool {
-        (0..self.width()).contains(&x) && (self.height()..).contains(&y)
+        (0..self.width()).contains(&x) && (self.height() + 1..).contains(&y)
     }
 
     pub fn place(&mut self, placement: Placement) {
@@ -308,6 +310,13 @@ impl Board {
         }
 
         s
+    }
+
+    #[must_use]
+    pub fn intersects_margin(&self) -> bool {
+        self.data[self.data.len() - self.margin..]
+            .iter()
+            .any(|x| x.iter().any(|y| y.is_filled()))
     }
 
     #[must_use]

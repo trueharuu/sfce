@@ -1,6 +1,11 @@
-use std::fmt::Write;
+use std::{
+    fmt::Write,
+    sync::{Arc, Mutex},
+};
 
 use indicatif::ProgressStyle;
+use itertools::Itertools;
+use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use strum::IntoEnumIterator;
 
 use crate::{
@@ -12,7 +17,7 @@ use crate::{
     placement::Placement,
     program::Sfce,
     ranged::Ranged,
-    traits::{CollectVec, FullyDedup},
+    traits::FullyDedupParallel,
 };
 
 pub fn command(
@@ -28,9 +33,8 @@ pub fn command(
         .last()
         .cloned()
         .unwrap_or_default();
-    // .to_gray();
-    // dbg!(&board);
-    let mut pages = Grid::default();
+
+    let pages = Arc::new(Mutex::new(Grid::default()));
     let qbar = indicatif::ProgressBar::new(pattern.queues().len() as u64);
     let style = ProgressStyle::default_spinner()
         .template("{spinner} {prefix} {msg:.bold} [{pos}/{len}]")
@@ -38,44 +42,44 @@ pub fn command(
         .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
     qbar.set_prefix("Generating placements for queue");
     qbar.set_style(style);
-  
-    for queue in pattern.queues() {
+
+    pattern.queues().par_iter().for_each(|queue| {
         qbar.set_message(
             queue
                 .iter()
                 .map(std::string::ToString::to_string)
-                .vec()
-                .join(""),
+                .collect::<String>(),
         );
         qbar.inc(1);
 
         let apoq = all_placements_of_queue(f, &board, queue.pieces());
+
         let ap = apoq
-            .iter()
-            .map(|x| (x, board.with_many_placements(x).with_comment(&queue)))
+            .par_iter()
+            .map(|x| (x, board.with_many_placements(x).with_comment(queue)))
+            .filter(|x| !x.1.intersects_margin())
             .filter(|x| clears.contains(&x.1.line_clears()))
             .fully_dedup_by(|(x, _), (y, _)| {
-                // println!("{px:?} = {py:?}");
                 minimal
                     && x.iter()
                         .map(Placement::piece)
                         .eq(y.iter().map(Placement::piece))
             })
-            // .fully_dedup_by_key(|x| x.1.clone())
+            .fully_dedup_by_key(|x| x.1.clone())
             .filter(|x| is_doable(f, &board, x.0))
-            .map(|x| x.1);
-        // println!("{:?}", ap.vec())
+            .map(|x| x.1)
+            .collect::<Vec<_>>();
 
-        pages.extend(ap);
-    }
+        pages.lock().unwrap().extend(ap);
+    });
 
-    pages.dedup_by_board();
-    write!(f.buf, "{}", f.tetfu(&pages))?;
+    pages.lock().unwrap().dedup_by_board();
+    write!(f.buf, "{}", f.tetfu(&pages.lock().unwrap()))?;
 
     Ok(())
 }
 
-fn all_placements_of_queue(sfce: &mut Sfce, board: &Board, queue: &[Piece]) -> Vec<Vec<Placement>> {
+fn all_placements_of_queue(sfce: &Sfce, board: &Board, queue: &[Piece]) -> Vec<Vec<Placement>> {
     if queue.is_empty() {
         return vec![vec![]];
     }
@@ -83,32 +87,33 @@ fn all_placements_of_queue(sfce: &mut Sfce, board: &Board, queue: &[Piece]) -> V
     let piece = queue[0];
     let remaining_queue = &queue[1..];
     let placements = all_placements_of_piece(sfce, board, piece);
-    let mut result = vec![];
 
-    for p in placements {
-        let mut s = board.clone();
-        s.skim_place(p);
-        let sub_placements = all_placements_of_queue(sfce, &s, remaining_queue);
+    placements
+        .into_par_iter()
+        .map(|p| {
+            let mut s = board.clone();
+            s.skim_place(p);
 
-        for mut sr in sub_placements {
-            sr.insert(0, p);
-            result.push(sr);
-        }
-    }
+            let sub_placements = all_placements_of_queue(sfce, &s, remaining_queue);
 
-    result
+            sub_placements.into_par_iter().map(move |mut sr| {
+                sr.insert(0, p);
+                sr
+            })
+        })
+        .flatten()
+        .collect()
 }
 
-fn is_doable(sfce: &mut Sfce, board: &Board, placements: &[Placement]) -> bool {
+fn is_doable(sfce: &Sfce, board: &Board, placements: &[Placement]) -> bool {
     if sfce.handling().ignore {
         return true;
     }
 
     let mut s = board.clone().skimmed();
     for p in placements {
-        // println!("testing placement {p:?}");
         let m = p.is_doable(&s.clone().skimmed(), s.spawn(), sfce.handling());
-        // println!("[{m:.1}] placing {p:?} on {s}");
+
         if m {
             s.place(*p);
             s.skim();
@@ -120,20 +125,27 @@ fn is_doable(sfce: &mut Sfce, board: &Board, placements: &[Placement]) -> bool {
     true
 }
 
-fn all_placements_of_piece(_: &mut Sfce, board: &Board, piece: Piece) -> Vec<Placement> {
-    let mut m = vec![];
-    for x in 0..board.width() {
-        for y in 0..board.height() {
-            for rotation in Rotation::iter() {
-                let p = Placement::new(piece, x, y, rotation);
+fn all_placements_of_piece(_: &Sfce, board: &Board, piece: Piece) -> Vec<Placement> {
+    let width = board.width();
+    let height = board.height();
 
-                if board.is_valid_placement_with_skim(p, false) {
-                    // println!("{p:?} on board was valid!");
-                    m.push(p);
-                }
-            }
-        }
-    }
+    let r = Rotation::iter().collect_vec();
+    let z = &r;
 
-    m
+    (0..width)
+        .into_par_iter()
+        .flat_map(|x| {
+            (0..height).into_par_iter().flat_map(move |y| {
+                z.par_iter().filter_map(move |rotation| {
+                    let p = Placement::new(piece, x, y, *rotation);
+
+                    if board.is_valid_placement_with_skim(p, false) {
+                        Some(p)
+                    } else {
+                        None
+                    }
+                })
+            })
+        })
+        .collect()
 }

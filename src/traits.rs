@@ -154,6 +154,154 @@ where
     }
 }
 
+use rayon::prelude::*;
+use std::sync::{Arc, Mutex};
+
+pub trait FullyDedupParallel: ParallelIterator {
+    /// Adapts the parallel iterator to yield only the first instance of each unique item (based on equality).
+    fn fully_dedup(self) -> FullyDedupParallelIter<Self>
+    where
+        Self: Sized,
+        Self::Item: Eq + Hash + Send + Sync,
+    {
+        FullyDedupParallelIter {
+            iter: self,
+            seen: Arc::new(Mutex::new(HashSet::new())),
+        }
+    }
+
+    /// Adapts the parallel iterator to yield only the first instance of each unique item,
+    /// determined by a predicate function.
+    fn fully_dedup_by<F>(self, pred: F) -> FullyDedupByParallelIter<Self, F>
+    where
+        Self: Sized,
+        Self::Item: Send + Sync,
+        F: Fn(&Self::Item, &Self::Item) -> bool + Send + Sync,
+    {
+        FullyDedupByParallelIter {
+            iter: self,
+            seen: Arc::new(Mutex::new(Vec::new())),
+            pred,
+        }
+    }
+
+    /// Adapts the parallel iterator to yield only the first instance of each unique item,
+    /// determined by a key function.
+    fn fully_dedup_by_key<K, F>(self, key_fn: F) -> FullyDedupByKeyParallelIter<Self, K, F>
+    where
+        Self: Sized,
+        K: Eq + Hash + Send + Sync,
+        F: Fn(&Self::Item) -> K + Send + Sync,
+    {
+        FullyDedupByKeyParallelIter {
+            iter: self,
+            seen: Arc::new(Mutex::new(HashSet::new())),
+            key_fn,
+        }
+    }
+}
+
+impl<I: ParallelIterator> FullyDedupParallel for I {}
+
+/// Parallel iterator adapter for `fully_dedup`.
+pub struct FullyDedupParallelIter<I: ParallelIterator> {
+    iter: I,
+    seen: Arc<Mutex<HashSet<I::Item>>>,
+}
+
+impl<I> ParallelIterator for FullyDedupParallelIter<I>
+where
+    I: ParallelIterator,
+    I::Item: Eq + Hash + Send + Sync + Clone,
+{
+    type Item = I::Item;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        let seen = self.seen;
+        self.iter
+            .filter(move |item| {
+                let mut seen_lock = seen.lock().unwrap();
+                seen_lock.insert(item.clone())
+            })
+            .drive_unindexed(consumer)
+    }
+}
+
+/// Parallel iterator adapter for `fully_dedup_by`.
+pub struct FullyDedupByParallelIter<I, F>
+where
+    I: ParallelIterator,
+{
+    iter: I,
+    seen: Arc<Mutex<Vec<I::Item>>>,
+    pred: F,
+}
+
+impl<I, F> ParallelIterator for FullyDedupByParallelIter<I, F>
+where
+    I: ParallelIterator,
+    F: Fn(&I::Item, &I::Item) -> bool + Send + Sync,
+    I::Item: Send + Sync + Clone,
+{
+    type Item = I::Item;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        let seen = self.seen;
+        let pred = self.pred;
+        self.iter
+            .filter(move |item| {
+                let mut seen_lock = seen.lock().unwrap();
+                if seen_lock.iter().any(|seen_item| pred(seen_item, item)) {
+                    false
+                } else {
+                    seen_lock.push(item.clone());
+                    true
+                }
+            })
+            .drive_unindexed(consumer)
+    }
+}
+
+/// Parallel iterator adapter for `fully_dedup_by_key`.
+pub struct FullyDedupByKeyParallelIter<I, K, F>
+where
+    I: ParallelIterator,
+{
+    iter: I,
+    seen: Arc<Mutex<HashSet<K>>>,
+    key_fn: F,
+}
+
+impl<I, K, F> ParallelIterator for FullyDedupByKeyParallelIter<I, K, F>
+where
+    I: ParallelIterator,
+    K: Eq + Hash + Send + Sync,
+    F: Fn(&I::Item) -> K + Send + Sync,
+{
+    type Item = I::Item;
+
+    fn drive_unindexed<C>(self, consumer: C) -> C::Result
+    where
+        C: rayon::iter::plumbing::UnindexedConsumer<Self::Item>,
+    {
+        let seen = self.seen;
+        let key_fn = self.key_fn;
+        self.iter
+            .filter(move |item| {
+                let key = key_fn(item);
+                let mut seen_lock = seen.lock().unwrap();
+                seen_lock.insert(key)
+            })
+            .drive_unindexed(consumer)
+    }
+}
+
 impl<T> GetWith for T where T: IntoIterator {}
 
 pub fn contiguous_subsequences<I, T>(input: I) -> Vec<Vec<T>>
