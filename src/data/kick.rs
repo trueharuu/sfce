@@ -57,7 +57,7 @@ impl<'a> Kickset<'a> {
     }
 }
 
-impl<'a> FromStr for Kickset<'a> {
+impl FromStr for Kickset<'_> {
     type Err = String;
     fn from_str(z: &str) -> Result<Self, Self::Err> {
         match z.to_ascii_lowercase().as_str() {

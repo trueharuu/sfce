@@ -1,13 +1,18 @@
-use std::fmt::Display;
+use std::{
+    fmt::Display,
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not},
+};
 
 use chumsky::Parser;
 use fumen::Fumen;
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
+use strum::IntoEnumIterator;
 
 use crate::{
     data::placements::PLACEMENTS,
     grid::Grid,
-    piece::Piece,
+    piece::{Piece, Rotation},
     placement::Placement,
     traits::{CollectVec, GetWith},
 };
@@ -37,6 +42,10 @@ impl Board {
             .and_then(|y| y.get(x))
             .copied()
             .unwrap_or(Piece::E)
+    }
+
+    pub fn set(&mut self, x: usize, y: usize, p: Piece) {
+        self.data[y][x] = p;
     }
 
     #[must_use]
@@ -214,7 +223,7 @@ impl Board {
                             let cell_below = s.data[dy - 1][dx];
                             trials.push(cell_below);
                         } else {
-                            trials.push(Piece::D)
+                            trials.push(Piece::D);
                         }
                     } else {
                         trials.push(Piece::D);
@@ -282,18 +291,41 @@ impl Board {
         c
     }
 
-    pub fn skim_place(&mut self, placement: Placement) {
-        let binding = self.clone();
-        let removed_lines = binding
-            .data
+    #[must_use]
+    pub fn removed_lines(&self) -> Vec<(usize, &Vec<Piece>)> {
+        self.data
             .iter()
             .enumerate()
-            .filter(|(_, x)| !x.contains(&Piece::E));
-        self.skim();
-        self.place(placement);
+            .filter(|(_, x)| !x.contains(&Piece::E))
+            .collect()
+    }
 
-        for (i, l) in removed_lines {
-            self.data.insert(i, l.clone());
+    pub fn skim_place(&mut self, placement: Placement) {
+        self.deoptimize();
+        if let Some(pm) =
+            PLACEMENTS.get_with(|x| x.0 == placement.piece() && x.1 == placement.rotation())
+        {
+            for (ox, oy) in pm.2 {
+                let dx = placement.x().checked_add_signed(*ox);
+                let dy = placement.y().checked_add_signed(*oy);
+                if let (Some(dx), Some(mut dy)) = (dx, dy) {
+                    if self.is_in_bounds(dx, dy) {
+                        if *oy < 0 {
+                            while self.is_cleared(dy) {
+                                dy -= 1;
+                            }
+                        }
+
+                        if *oy > 0 {
+                            while self.is_cleared(dy) {
+                                dy += 1;
+                            }
+                        }
+
+                        self.data[dy][dx] = placement.piece();
+                    }
+                }
+            }
         }
     }
 
@@ -397,18 +429,48 @@ impl Board {
     }
 
     #[must_use]
+    pub fn is_cleared(&self, y: usize) -> bool {
+        self.removed_lines().iter().map(|x| x.0).contains(&y)
+    }
+
+    #[must_use]
     pub fn fast(&self) -> Bits {
-        let w = self.width();
-        let h = self.height();
-        let x = self
-            .clone()
-            .as_deoptimized()
-            .data
+        let width = self.width();
+        let height = self.height();
+        let bits = self.clone().as_deoptimized().data[..self.height()]
             .concat()
             .iter()
             .map(|x| x.is_filled())
             .vec();
-        Bits(w, h, x)
+        Bits {
+            width,
+            height,
+            bits,
+        }
+    }
+
+    #[must_use]
+    pub fn dimensions(&self) -> (usize, usize) {
+        (self.width(), self.height())
+    }
+}
+
+impl BitOr for Board {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self::Output {
+        assert_eq!(self.dimensions(), rhs.dimensions());
+        let mut m = self.clone();
+
+        for x in 0..self.width() {
+            for y in 0..self.height() {
+                let p = rhs.get(x, y);
+                if p.is_filled() {
+                    m.set(x, y, p);
+                }
+            }
+        }
+
+        m
     }
 }
 
@@ -502,4 +564,274 @@ mod parse {
 }
 
 #[derive(Hash, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
-pub struct Bits(usize, usize, Vec<bool>);
+pub struct Bits {
+    pub width: usize,
+    pub height: usize,
+    pub bits: Vec<bool>,
+}
+
+impl Not for Bits {
+    type Output = Self;
+    fn not(mut self) -> Self::Output {
+        for i in self.bits.as_mut_slice() {
+            *i = !*i;
+        }
+
+        self
+    }
+}
+
+impl BitAnd for Bits {
+    type Output = Self;
+    fn bitand(self, rhs: Self) -> Self::Output {
+        assert_eq!(self.dimensions(), rhs.dimensions());
+        let mut m = self.clone();
+
+        for (a, b) in m.bits.iter_mut().zip(rhs.bits.iter()) {
+            *a &= b;
+        }
+
+        m
+    }
+}
+
+impl BitOr for Bits {
+    type Output = Self;
+    fn bitor(self, rhs: Self) -> Self::Output {
+        assert_eq!(self.dimensions(), rhs.dimensions());
+        let mut m = self.clone();
+
+        for (a, b) in m.bits.iter_mut().zip(rhs.bits.iter()) {
+            *a |= b;
+        }
+
+        m
+    }
+}
+
+impl BitAndAssign for Bits {
+    fn bitand_assign(&mut self, rhs: Self) {
+        assert_eq!(self.dimensions(), rhs.dimensions());
+
+        for (a, b) in self.bits.iter_mut().zip(rhs.bits.iter()) {
+            *a &= b;
+        }
+    }
+}
+
+impl BitOrAssign for Bits {
+    fn bitor_assign(&mut self, rhs: Self) {
+        assert_eq!(self.dimensions(), rhs.dimensions());
+
+        for (a, b) in self.bits.iter_mut().zip(rhs.bits.iter()) {
+            *a |= b;
+        }
+    }
+}
+
+impl Bits {
+    #[must_use]
+    pub fn dimensions(&self) -> (usize, usize) {
+        (self.width, self.height)
+    }
+
+    #[must_use]
+    pub fn get(&self, x: usize, y: usize) -> bool {
+        self.bits.get(self.index(x, y)).copied().unwrap_or(false)
+    }
+
+    #[must_use]
+    pub fn has(&self, x: usize, y: usize) -> bool {
+        (..self.width).contains(&x) && (..self.height).contains(&y)
+    }
+
+    #[must_use]
+    pub fn get_mut(&mut self, x: usize, y: usize) -> &mut bool {
+        &mut self.bits[y * self.width + x]
+    }
+
+    pub fn set(&mut self, x: usize, y: usize, b: bool) {
+        self.bits[y * self.width + x] = b;
+    }
+
+    #[must_use]
+    pub const fn index(&self, x: usize, y: usize) -> usize {
+        y * self.width + x
+    }
+
+    #[must_use]
+    pub fn shift_up(&self) -> Self {
+        let mut s = self.clone();
+        s.bits.drain((self.height - 1) * self.width..);
+        s.bits.splice(0..0, vec![true; self.width]);
+        s
+    }
+
+    #[must_use]
+    pub fn shift_right(&self) -> Self {
+        let mut s = self.clone();
+        for row in (0..self.height).rev() {
+            s.bits.remove((row + 1) * self.width - 1);
+            s.bits.insert(row * self.width, true);
+        }
+
+        s
+    }
+
+    #[must_use]
+    pub fn shift_down(&self) -> Self {
+        let mut s = self.clone();
+        s.bits.drain(0..self.width);
+        s.bits.extend(vec![true; self.width]);
+        s
+    }
+
+    #[must_use]
+    pub fn shift_left(&self) -> Self {
+        let mut s = self.clone();
+        for row in 0..s.height {
+            s.bits.remove(row * s.width);
+            s.bits.insert((row + 1) * s.width - 1, true);
+        }
+
+        s
+    }
+
+    #[must_use]
+    pub fn shift_for(&self, mut x: isize, mut y: isize) -> Self {
+        let mut s = self.clone();
+        while x < 0 {
+            x += 1;
+            s = s.shift_right();
+        }
+
+        while x > 0 {
+            x -= 1;
+            s = s.shift_left();
+        }
+
+        while y < 0 {
+            y += 1;
+            s = s.shift_up();
+        }
+
+        while y > 0 {
+            y -= 1;
+            s = s.shift_down();
+        }
+
+        s
+    }
+
+    #[must_use]
+    pub fn tint(self, piece: Piece) -> Board {
+        Board {
+            margin: 0,
+            comment: None,
+            data: self
+                .bits
+                .iter()
+                .chunks(self.width)
+                .into_iter()
+                .map(|x| x.map(|y| if *y { piece } else { Piece::E }).collect())
+                .collect(),
+        }
+    }
+
+    #[must_use]
+    pub fn board(self) -> Board {
+        self.tint(Piece::G)
+    }
+
+    #[must_use]
+    pub fn possible_placements(&self, piece: Piece, rotation: Rotation) -> Self {
+        let mut s = self.clone();
+        let rm = s.removed_lines();
+        s.skim();
+
+        let o = piece.offsets(rotation);
+        let mut m = !o
+            .iter()
+            .map(|&(x, y)| s.shift_for(x, y))
+            .fold(s.clone(), |x, y| x | y);
+
+        for x in 0..s.width {
+            for y in 0..s.height {
+                if !o.iter().map(|(ox, oy)| (*ox, oy - 1)).any(|(ox, oy)| {
+                    let zx = x.checked_add_signed(ox);
+                    let zy = y.checked_add_signed(oy);
+                    if zy.is_none() {
+                        return true;
+                    }
+                    if zx.is_none() {
+                        return false;
+                    }
+                    !s.has(zx.unwrap(), zy.unwrap()) || s.get(zx.unwrap(), zy.unwrap())
+                }) {
+                    m.set(x, y, false);
+                }
+            }
+        }
+
+        m.add_back(&rm, false);
+
+        m
+    }
+
+    #[must_use]
+    pub fn all_placements_of_piece(&self, piece: Piece) -> Vec<Placement> {
+        // dbg!(self.height);
+        let mut m = vec![];
+        for rotation in Rotation::iter() {
+            m.extend(
+                self.possible_placements(piece, rotation)
+                    .filled_cells()
+                    .iter()
+                    .map(|&(x, y)| Placement::new(piece, x, y, rotation)),
+            );
+        }
+
+        m
+    }
+
+    #[must_use]
+    pub fn filled_cells(&self) -> Vec<(usize, usize)> {
+        self.bits
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| **x)
+            .map(|(x, _)| (x % self.width, x / self.width))
+            .collect()
+    }
+
+    #[must_use]
+    pub fn removed_lines(&self) -> Vec<usize> {
+        self.bits
+            .chunks_exact(self.width)
+            .enumerate()
+            .filter(|(_, x)| !x.contains(&false))
+            .map(|x| x.0)
+            .collect()
+    }
+
+    pub fn skim(&mut self) {
+        let lcs = self.removed_lines().len();
+        self.height -= lcs;
+
+        self.bits = self
+            .bits
+            .chunks(self.width)
+            .filter(|x| x.contains(&false))
+            .flatten()
+            .copied()
+            .collect();
+    }
+
+    pub fn add_back(&mut self, l: &[usize], a: bool) {
+        self.height += l.len();
+        for i in l {
+            let len = i * self.width;
+            self.bits.splice(len..len, vec![a; self.width]);
+        }
+    }
+}

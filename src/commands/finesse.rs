@@ -4,7 +4,7 @@ use itertools::Itertools;
 use strum::IntoEnumIterator;
 
 use crate::{
-    board::Board, board_parser::Tetfu, input::Input, piece::Rotation, placement::Placement,
+    board_parser::Tetfu, input::Input, piece::Rotation, placement::Placement,
     program::Sfce,
 };
 

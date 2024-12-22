@@ -3,20 +3,19 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use indicatif::ProgressStyle;
-use itertools::Itertools;
+use indicatif::{ProgressBar, ProgressStyle};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
-use strum::IntoEnumIterator;
 
 use crate::{
     board::Board,
     board_parser::Tetfu,
     grid::Grid,
-    pattern::Pattern,
-    piece::{Piece, Rotation},
+    pattern::{Pattern, Queue},
+    piece::Piece,
     placement::Placement,
     program::Sfce,
     ranged::Ranged,
+    set::Set,
     traits::FullyDedupParallel,
 };
 
@@ -36,7 +35,8 @@ impl Sfce {
             .unwrap_or_default();
 
         let pages = Arc::new(Mutex::new(Grid::default()));
-        let qbar = indicatif::ProgressBar::new(pattern.queues().len() as u64);
+
+        let qbar = ProgressBar::new(pattern.queues().len() as u64);
         let style = ProgressStyle::default_spinner()
             .template("{spinner} {prefix} {msg:.bold} [{pos}/{len}]")
             .unwrap()
@@ -58,7 +58,6 @@ impl Sfce {
             let ap = apoq
                 .par_iter()
                 .map(|x| (x, board.with_many_placements(x).with_comment(queue)))
-                .filter(|x| !x.1.intersects_margin())
                 .filter(|x| clears.contains(&x.1.line_clears()))
                 .fully_dedup_by(|(x, _), (y, _)| {
                     minimal
@@ -80,10 +79,100 @@ impl Sfce {
         Ok(())
     }
 
+    #[allow(clippy::cast_precision_loss)]
+    pub fn percent_command(
+        &mut self,
+        tetfu: &Tetfu,
+        pattern: &Pattern,
+        clears: Ranged<usize>,
+    ) -> anyhow::Result<()> {
+        let board = self
+            .resize(tetfu.grid())
+            .pages()
+            .last()
+            .cloned()
+            .unwrap_or_default();
+
+        let fail = Arc::new(Mutex::new(Vec::new()));
+        let seen_before = Arc::new(Mutex::new(Set::new(|x: &Queue, y| x.translatable(y))));
+        let qbar = ProgressBar::new(pattern.queues().len() as u64);
+        let style = ProgressStyle::default_spinner()
+            .template("{spinner} {prefix} {msg:.bold} [{pos}/{len}]")
+            .unwrap()
+            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
+        qbar.set_prefix("Generating placements for queue");
+        qbar.set_style(style);
+
+        let v = pattern.queues();
+        v.par_iter().for_each(|queue| {
+            qbar.set_message(
+                queue
+                    .iter()
+                    .map(std::string::ToString::to_string)
+                    .collect::<String>(),
+            );
+            qbar.inc(1);
+            if seen_before.lock().unwrap().has(queue) && !fail.lock().unwrap().contains(&queue) {
+                return;
+            }
+
+            seen_before.lock().unwrap().insert(queue.clone());
+
+            let apoq = self.all_placements_of_queue(&board, queue.pieces());
+
+            let ap = apoq
+                .par_iter()
+                .map(|x| (x, board.with_many_placements(x).with_comment(queue)))
+                .filter(|x| clears.contains(&x.1.line_clears()))
+                .fully_dedup_by(|(x, _), (y, _)| {
+                    x.iter()
+                        .map(Placement::piece)
+                        .eq(y.iter().map(Placement::piece))
+                })
+                .fully_dedup_by_key(|x| x.1.clone())
+                .filter(|x| self.is_doable(&board, x.0))
+                .map(|x| x.1)
+                .collect::<Vec<_>>();
+
+            if ap.is_empty() {
+                fail.lock().unwrap().push(queue);
+            };
+        });
+
+        let p = Arc::try_unwrap(fail).unwrap().into_inner().unwrap();
+        writeln!(
+            self.buf,
+            "{}/{} queues pass ({:.2}%)",
+            v.len() - p.len(),
+            v.len(),
+            100.0 * (v.len() - p.len()) as f64 / v.len() as f64
+        )?;
+
+        if !p.is_empty() {
+            write!(self.buf, "fail queues:")?;
+            for (i, q) in p.iter().enumerate() {
+                if i % self.program.args.pw == 0 {
+                    writeln!(self.buf)?;
+                }
+                write!(self.buf, "{q} ")?;
+            }
+        }
+        Ok(())
+    }
+
     #[must_use]
     pub fn all_placements_of_queue(&self, board: &Board, queue: &[Piece]) -> Vec<Vec<Placement>> {
         if queue.is_empty() {
             return vec![vec![]];
+        }
+
+        // i can haz optimizationburger?
+        if queue.len() == 1 {
+            return self
+                .all_placements_of_piece(board, queue[0])
+                .iter()
+                .map(|x| vec![*x])
+                .collect();
         }
 
         let piece = queue[0];
@@ -130,27 +219,6 @@ impl Sfce {
 
     #[must_use]
     pub fn all_placements_of_piece(&self, board: &Board, piece: Piece) -> Vec<Placement> {
-        let width = board.width();
-        let height = board.height();
-
-        let r = Rotation::iter().collect_vec();
-        let z = &r;
-
-        (0..width)
-            .into_par_iter()
-            .flat_map(|x| {
-                (0..height).into_par_iter().flat_map(move |y| {
-                    z.par_iter().filter_map(move |rotation| {
-                        let p = Placement::new(piece, x, y, *rotation);
-
-                        if board.is_valid_placement_with_skim(p, false) {
-                            Some(p)
-                        } else {
-                            None
-                        }
-                    })
-                })
-            })
-            .collect()
+        board.fast().all_placements_of_piece(piece)
     }
 }

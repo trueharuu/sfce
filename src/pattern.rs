@@ -1,9 +1,12 @@
-use std::{collections::VecDeque, fmt::Display, str::FromStr};
+use std::{collections::{HashSet, VecDeque}, fmt::Display, str::FromStr};
 
 use chumsky::Parser;
 use itertools::Itertools;
 
-use crate::{piece::Piece, traits::CollectVec};
+use crate::{
+    piece::Piece,
+    traits::{CollectVec, FullyDedup},
+};
 
 #[derive(Clone, Debug)]
 pub struct Pattern {
@@ -23,6 +26,15 @@ impl Pattern {
     #[must_use]
     pub fn queues(&self) -> Vec<Queue> {
         self.clone().into_iter().vec()
+    }
+
+    pub fn into_iter_with_hold(self) -> impl Iterator<Item = Queue> {
+        self.into_iter().fully_dedup_by(Queue::translatable)
+    }
+
+    #[must_use]
+    pub fn queues_with_hold(&self) -> Vec<Queue> {
+        self.clone().into_iter_with_hold().vec()
     }
 }
 
@@ -52,6 +64,85 @@ impl Queue {
 
     pub fn iter(&self) -> std::slice::Iter<'_, Piece> {
         self.0.iter()
+    }
+
+    #[must_use]
+    pub fn translatable(&self, b: &Queue) -> bool {
+        #[derive(Debug, PartialEq, Eq, Clone, Hash)]
+        struct State {
+            queue: VecDeque<Piece>,
+            hold: Option<Piece>,
+            target_index: usize,
+        }
+        if self.len() != b.len() {
+            return false; // Lengths must match
+        }
+
+        let initial_queue: VecDeque<Piece> = self.iter().copied().collect();
+        let mut visited = HashSet::new();
+        let mut stack = Vec::new();
+
+        // Initial state: all pieces in the queue, no hold, and starting at target index 0
+        stack.push(State {
+            queue: initial_queue,
+            hold: None,
+            target_index: 0,
+        });
+
+        while let Some(state) = stack.pop() {
+            if state.target_index == b.len() {
+                return true; // Successfully matched the entire target sequence
+            }
+
+            if visited.contains(&state) {
+                continue; // Avoid revisiting the same state
+            }
+
+            visited.insert(state.clone());
+
+            let target = b.0[state.target_index];
+
+            // Option 1: Place the front of the queue
+            if let Some(&front) = state.queue.front() {
+                if front == target {
+                    let mut new_queue = state.queue.clone();
+                    new_queue.pop_front();
+                    stack.push(State {
+                        queue: new_queue,
+                        hold: state.hold,
+                        target_index: state.target_index + 1,
+                    });
+                }
+            }
+
+            // Option 2: Place the hold piece
+            if let Some(held_piece) = state.hold {
+                if held_piece == target {
+                    let mut new_queue = state.queue.clone();
+                    let new_hold = new_queue.pop_front();
+                    stack.push(State {
+                        queue: new_queue,
+                        hold: new_hold,
+                        target_index: state.target_index + 1,
+                    });
+                }
+            }
+
+            // Option 3: Hold the front of the queue (if hold is empty or hold does not match target)
+            if let Some(front) = state.queue.front() {
+                if state.hold.is_none() || state.hold != Some(target) {
+                    let mut new_queue = state.queue.clone();
+                    new_queue.pop_front();
+                    stack.push(State {
+                        queue: new_queue,
+                        hold: Some(*front),
+                        target_index: state.target_index,
+                    });
+                }
+            }
+        }
+
+        false // No valid sequence found
     }
 }
 
@@ -83,11 +174,11 @@ impl IntoIterator for Queue {
 }
 
 impl<'a> IntoIterator for &'a Queue {
-  type Item = &'a Piece;
-  type IntoIter = core::slice::Iter<'a, Piece>;
-  fn into_iter(self) -> Self::IntoIter {
-      self.pieces().iter()
-  }
+    type Item = &'a Piece;
+    type IntoIter = core::slice::Iter<'a, Piece>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.pieces().iter()
+    }
 }
 
 impl FromStr for Pattern {
@@ -281,7 +372,7 @@ pub mod parse {
 
     use crate::piece::Piece;
 
-    use super::{Pattern, Part};
+    use super::{Part, Pattern};
 
     pub fn parser<'a>() -> impl Parser<'a, &'a str, Pattern> {
         let piece = one_of("IJOLZSTijolzst")
@@ -302,8 +393,7 @@ pub mod parse {
         let repeatable = choice((bag_except, bag, wildcard, piece));
         let count = group((repeatable.clone(), text::int(10).from_str().unwrapped()))
             .map(|(x, y)| Part::Count(Box::new(x), y));
-        let all =
-            group((repeatable.clone(), just("!"))).map(|(x, _)| Part::All(Box::new(x)));
+        let all = group((repeatable.clone(), just("!"))).map(|(x, _)| Part::All(Box::new(x)));
         let part = choice((all, count, repeatable));
         part.separated_by(just(",").or_not())
             .allow_trailing()

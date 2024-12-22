@@ -24,6 +24,13 @@ impl Grid {
         Self(z)
     }
 
+    pub fn from_pages<I>(pages: I) -> Self
+    where
+        I: IntoIterator<Item = Board>,
+    {
+        Self(pages.into_iter().collect())
+    }
+
     #[must_use]
     pub fn empty(width: usize, height: usize) -> Self {
         Self(vec![Board::empty(width, height, 0)])
@@ -54,6 +61,11 @@ impl Grid {
     #[must_use]
     pub fn pages(&self) -> &Vec<Board> {
         &self.0
+    }
+
+    #[must_use]
+    pub fn page(self) -> Board {
+        self.0.into_iter().next().unwrap()
     }
 
     pub fn pages_mut(&mut self) -> &mut Vec<Board> {

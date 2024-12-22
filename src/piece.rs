@@ -1,6 +1,10 @@
+use std::str::FromStr;
+
 use fumen::CellColor;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumString};
+
+use crate::{data::placements::PLACEMENTS, traits::GetWith};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, Hash, Serialize, Deserialize)]
 #[strum(ascii_case_insensitive)]
@@ -18,7 +22,8 @@ pub enum Piece {
 }
 
 impl Piece {
-    #[must_use] pub fn cell_color(self) -> CellColor {
+    #[must_use]
+    pub fn cell_color(self) -> CellColor {
         match self {
             Piece::D | Piece::G => CellColor::Grey,
             Piece::E => CellColor::Empty,
@@ -32,7 +37,8 @@ impl Piece {
         }
     }
 
-    #[must_use] pub fn fum(self) -> fumen::PieceType {
+    #[must_use]
+    pub fn fum(self) -> fumen::PieceType {
         match self {
             Piece::I => fumen::PieceType::I,
             Piece::J => fumen::PieceType::J,
@@ -45,12 +51,22 @@ impl Piece {
         }
     }
 
-    #[must_use] pub fn is_filled(self) -> bool {
+    #[must_use]
+    pub fn is_filled(self) -> bool {
         self != Self::E
     }
 
-    #[must_use] pub fn is_filled_with_piece(self) -> bool {
+    #[must_use]
+    pub fn is_filled_with_piece(self) -> bool {
         self != Self::E && self != Self::G && self != Self::D
+    }
+
+    #[must_use]
+    pub fn offsets<'a>(self, rotation: Rotation) -> &'a [(isize, isize)] {
+        PLACEMENTS
+            .get_with(|x| x.0 == self && x.1 == rotation)
+            .unwrap()
+            .2
     }
 }
 
@@ -62,8 +78,22 @@ pub enum Rotation {
     West,
 }
 
+impl FromStr for Rotation {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "up" | "north" => Ok(Self::North),
+            "right" | "east" => Ok(Self::East),
+            "down" | "south" => Ok(Self::South),
+            "left" | "west" => Ok(Self::West),
+            c => Err(format!("unknown rotation {c}")),
+        }
+    }
+}
+
 impl Rotation {
-    #[must_use] pub fn cw(self) -> Self {
+    #[must_use]
+    pub fn cw(self) -> Self {
         match self {
             Self::North => Self::East,
             Self::East => Self::South,
@@ -72,7 +102,8 @@ impl Rotation {
         }
     }
 
-    #[must_use] pub fn ccw(self) -> Self {
+    #[must_use]
+    pub fn ccw(self) -> Self {
         match self {
             Self::East => Self::North,
             Self::South => Self::East,
@@ -81,7 +112,8 @@ impl Rotation {
         }
     }
 
-    #[must_use] pub fn flip(self) -> Self {
+    #[must_use]
+    pub fn flip(self) -> Self {
         match self {
             Self::North => Self::South,
             Self::South => Self::North,

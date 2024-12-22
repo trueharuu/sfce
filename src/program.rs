@@ -5,11 +5,11 @@ use clap::Parser;
 use crate::{
     board_parser::Tetfu,
     caches::Caches,
-    commands,
     data::kick::Kickset,
     grid::Grid,
     input::{DropType, Key},
     pattern::Pattern,
+    piece::{Piece, Rotation},
     ranged::Ranged,
     text::Text,
 };
@@ -48,6 +48,8 @@ pub struct Options {
     pub board_margin: usize,
     #[arg(long = "no-cache")]
     pub no_cache: bool,
+    #[arg(long = "pw", default_value = "7")]
+    pub pw: usize,
 }
 
 #[derive(clap::Args, Clone, Debug, Copy, PartialEq, Eq)]
@@ -117,6 +119,14 @@ pub enum SfceCommand {
         #[arg(short = 'm')]
         minimal: bool,
     },
+    Percent {
+        #[arg(short = 't', long = "tetfu")]
+        tetfu: Text<Tetfu>,
+        #[arg(short = 'p', long = "pattern")]
+        pattern: Text<Pattern>,
+        #[arg(short = 'c', default_value = "..")]
+        clears: Ranged<usize>,
+    },
     Test,
     Grid {
         #[arg(short = 't')]
@@ -125,6 +135,15 @@ pub enum SfceCommand {
     Finesse {
         #[arg(short = 't')]
         tetfu: Text<Tetfu>,
+    },
+
+    Possible {
+        #[arg(short = 't')]
+        tetfu: Text<Tetfu>,
+        #[arg(short = 'p')]
+        piece: Piece,
+        #[arg(short = 'r')]
+        rotation: Rotation,
     },
 }
 
@@ -189,20 +208,31 @@ impl Sfce {
                 clears,
                 minimal,
             } => self.move_command(&tetfu.contents(), &pattern.contents(), clears, minimal)?,
+            SfceCommand::Percent {
+                tetfu,
+                pattern,
+                clears,
+                
+            } => self.percent_command(&tetfu.contents(), &pattern.contents(), clears)?,
             SfceCommand::Finesse { tetfu } => self.finesse_command(&tetfu.contents())?,
             SfceCommand::Grid { tetfu } => write!(self.buf, "{}", tetfu.grid().as_deoptimized())?,
             SfceCommand::Test => self.test_command()?,
+            SfceCommand::Possible {
+                tetfu,
+                piece,
+                rotation,
+            } => self.possible(&tetfu, piece, rotation),
         }
 
         if let Some(s) = &self.program.args.output {
-            println!("--> wrote {} bytes to path", self.buf.as_bytes().len());
+            println!("--> wrote {} bytes to path", self.buf.len());
             std::fs::write(s, self.buf.clone())?;
         } else {
             writeln!(std::io::stdout(), "{}", self.buf)?;
         }
 
         if self.program.args.stopwatch {
-            println!("--> took {:.3} seconds", i.elapsed().as_secs_f64());
+            println!("--> took {:.3}s", i.elapsed().as_secs_f64());
         }
 
         if !self.program.args.no_cache {

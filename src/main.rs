@@ -18,6 +18,7 @@ pub mod program;
 pub mod ranged;
 pub mod text;
 pub mod traits;
+pub mod set;
 
 fn main() {
     let mut p = Sfce::new();

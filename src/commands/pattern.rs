@@ -1,28 +1,25 @@
 use std::fmt::Write;
 
-use crate::{
-    program::{PatternCli, Sfce},
-    traits::CollectVec,
-};
+use crate::program::{PatternCli, Sfce};
 
 impl Sfce {
     pub fn pattern_command(&mut self, l: PatternCli) -> anyhow::Result<()> {
         match l {
             PatternCli::Expand { pattern } => {
                 // println!("{:?}", pat);
-                let list = pattern.contents().queues();
-                for l in &list {
-                    writeln!(
-                        self.buf,
-                        "{}",
-                        l.iter()
-                            .map(std::string::ToString::to_string)
-                            .vec()
-                            .join("")
-                    )?;
+                let list = pattern.contents();
+                let mut i = 0;
+                for q in list {
+                    if i % self.program.args.pw == 0 {
+                        writeln!(self.buf)?;
+                    }
+                    write!(self.buf, "{q} ")?;
+                    i += 1;
                 }
 
-                writeln!(self.buf, "{} queues total", list.len())?;
+                writeln!(self.buf)?;
+
+                writeln!(self.buf, "{i} queues total")?;
             }
         }
 
