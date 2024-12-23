@@ -1,11 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{
-    board::{Bits, Board},
-    input::Key,
-    placement::Placement,
-    program::Sfce,
-};
+use crate::{bits::Bits, board::Board, input::Key, placement::Placement, program::Sfce};
 
 #[derive(Debug, Default)]
 pub struct Caches {

@@ -7,16 +7,8 @@ use indicatif::{ProgressBar, ProgressStyle};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
-    board::Board,
-    board_parser::Tetfu,
-    grid::Grid,
-    pattern::{Pattern, Queue},
-    piece::Piece,
-    placement::Placement,
-    program::Sfce,
-    ranged::Ranged,
-    set::Set,
-    traits::FullyDedupParallel,
+    board::Board, board_parser::Tetfu, grid::Grid, pattern::Pattern, piece::Piece,
+    placement::Placement, program::Sfce, ranged::Ranged, traits::FullyDedupParallel,
 };
 
 impl Sfce {
@@ -53,24 +45,33 @@ impl Sfce {
             );
             qbar.inc(1);
 
-            let apoq = self.all_placements_of_queue(&board, queue.pieces());
+            for h in self.hold_queues(queue.clone()) {
+                let apoq = self.all_placements_of_queue(&board, h.pieces());
 
-            let ap = apoq
-                .par_iter()
-                .map(|x| (x, board.with_many_placements(x).with_comment(queue)))
-                .filter(|x| clears.contains(&x.1.line_clears()))
-                .fully_dedup_by(|(x, _), (y, _)| {
-                    minimal
-                        && x.iter()
-                            .map(Placement::piece)
-                            .eq(y.iter().map(Placement::piece))
-                })
-                .fully_dedup_by_key(|x| x.1.clone())
-                .filter(|x| self.is_doable(&board, x.0))
-                .map(|x| x.1)
-                .collect::<Vec<_>>();
+                let ap = apoq
+                    .par_iter()
+                    .map(|x| {
+                        (
+                            x,
+                            board
+                                .with_many_placements(x)
+                                .with_comment(format!("{queue} ({h})")),
+                        )
+                    })
+                    .filter(|x| clears.contains(&x.1.line_clears()))
+                    .fully_dedup_by(|(x, _), (y, _)| {
+                        minimal
+                            && x.iter()
+                                .map(Placement::piece)
+                                .eq(y.iter().map(Placement::piece))
+                    })
+                    .fully_dedup_by_key(|x| x.1.clone())
+                    .filter(|x| self.is_doable(&board, x.0))
+                    .map(|x| x.1)
+                    .collect::<Vec<_>>();
 
-            pages.lock().unwrap().extend(ap);
+                pages.lock().unwrap().extend(ap);
+            }
         });
 
         pages.lock().unwrap().dedup_by_board();
@@ -93,8 +94,9 @@ impl Sfce {
             .cloned()
             .unwrap_or_default();
 
-        let fail = Arc::new(Mutex::new(Vec::new()));
-        let seen_before = Arc::new(Mutex::new(Set::new(|x: &Queue, y| x.translatable(y))));
+        let s = Arc::new(Mutex::new(vec![]));
+        let f = Arc::new(Mutex::new(vec![]));
+
         let qbar = ProgressBar::new(pattern.queues().len() as u64);
         let style = ProgressStyle::default_spinner()
             .template("{spinner} {prefix} {msg:.bold} [{pos}/{len}]")
@@ -103,60 +105,51 @@ impl Sfce {
         qbar.set_prefix("Generating placements for queue");
         qbar.set_style(style);
 
-        let v = pattern.queues();
-        v.par_iter().for_each(|queue| {
+        let z = pattern.queues();
+        z.par_iter().for_each(|q| {
             qbar.set_message(
-                queue
-                    .iter()
+                q.iter()
                     .map(std::string::ToString::to_string)
                     .collect::<String>(),
             );
             qbar.inc(1);
-            if seen_before.lock().unwrap().has(queue) && !fail.lock().unwrap().contains(&queue) {
-                return;
+            let h = self.hold_queues(q.clone());
+
+            let success = h.par_iter().any(|queue| {
+                let apoq = self.all_placements_of_queue(&board, queue.pieces());
+
+                apoq.par_iter()
+                    .map(|x| (x, board.with_many_placements(x).with_comment(queue)))
+                    .filter(|x| clears.contains(&x.1.line_clears()))
+                    .any(|x| self.is_doable(&board, x.0))
+            });
+
+            if success {
+                s.lock().unwrap().push(q);
+            } else {
+                f.lock().unwrap().push(q);
             }
-
-            seen_before.lock().unwrap().insert(queue.clone());
-
-            let apoq = self.all_placements_of_queue(&board, queue.pieces());
-
-            let ap = apoq
-                .par_iter()
-                .map(|x| (x, board.with_many_placements(x).with_comment(queue)))
-                .filter(|x| clears.contains(&x.1.line_clears()))
-                .fully_dedup_by(|(x, _), (y, _)| {
-                    x.iter()
-                        .map(Placement::piece)
-                        .eq(y.iter().map(Placement::piece))
-                })
-                .fully_dedup_by_key(|x| x.1.clone())
-                .filter(|x| self.is_doable(&board, x.0))
-                .map(|x| x.1)
-                .collect::<Vec<_>>();
-
-            if ap.is_empty() {
-                fail.lock().unwrap().push(queue);
-            };
         });
 
-        let p = Arc::try_unwrap(fail).unwrap().into_inner().unwrap();
+        let fs = Arc::try_unwrap(s).unwrap().into_inner().unwrap();
+        let ff = Arc::try_unwrap(f).unwrap().into_inner().unwrap();
+
         writeln!(
             self.buf,
-            "{}/{} queues pass ({:.2}%)",
-            v.len() - p.len(),
-            v.len(),
-            100.0 * (v.len() - p.len()) as f64 / v.len() as f64
+            "{}/{} queues ({:.2}%)",
+            fs.len(),
+            fs.len() + ff.len(),
+            100.0 * fs.len() as f64 / (fs.len() + ff.len()) as f64
         )?;
-
-        if !p.is_empty() {
-            write!(self.buf, "fail queues:")?;
-            for (i, q) in p.iter().enumerate() {
-                if i % self.program.args.pw == 0 {
-                    writeln!(self.buf)?;
-                }
-                write!(self.buf, "{q} ")?;
+        write!(self.buf, "fail queues:")?;
+        for (i, &q) in ff.iter().enumerate() {
+            if i % self.program.args.pw == 0 {
+                writeln!(self.buf)?;
             }
+            write!(self.buf, "{q} ")?;
         }
+
+        writeln!(self.buf)?;
         Ok(())
     }
 

@@ -1,4 +1,8 @@
-use std::{collections::{HashSet, VecDeque}, fmt::Display, str::FromStr};
+use std::{
+    collections::{HashSet, VecDeque},
+    fmt::Display,
+    str::FromStr,
+};
 
 use chumsky::Parser;
 use itertools::Itertools;
@@ -143,6 +147,89 @@ impl Queue {
         }
 
         false // No valid sequence found
+    }
+
+    #[must_use] pub fn hold_queues(&self) -> HashSet<Self> {
+        #[derive(Debug, PartialEq, Eq, Clone, Hash)]
+        struct State {
+            queue: VecDeque<Piece>,
+            hold: Option<Piece>,
+            sequence: Vec<Piece>,
+        }
+        let mut result = HashSet::new();
+        let mut visited = HashSet::new();
+        let mut stack = Vec::new();
+
+        // Initial state: no hold, starting queue, and an empty sequence
+        stack.push(State {
+            queue: VecDeque::from(self.0.clone()),
+            hold: None,
+            sequence: vec![],
+        });
+
+        while let Some(state) = stack.pop() {
+            // If we've already visited this state, skip it
+            if !visited.insert((
+                state.queue.clone(),
+                state.hold,
+                state.sequence.clone(),
+            )) {
+                continue;
+            }
+
+            // If the queue is empty, finalize the sequence
+            if state.queue.is_empty() {
+                if let Some(held_piece) = state.hold {
+                    // If there's a piece in the hold, it must be placed
+                    let mut final_sequence = state.sequence.clone();
+                    final_sequence.push(held_piece);
+                    result.insert(Self(final_sequence));
+                } else {
+                    // If no hold piece remains, just add the sequence
+                    result.insert(Self(state.sequence.clone()));
+                }
+                continue;
+            }
+
+            // Option 1: Place the front piece from the queue
+            if let Some(&front) = state.queue.front() {
+                let mut new_queue = state.queue.clone();
+                let mut new_sequence = state.sequence.clone();
+                new_sequence.push(front); // Add the placed piece to the sequence
+                new_queue.pop_front();
+                stack.push(State {
+                    queue: new_queue,
+                    hold: state.hold,
+                    sequence: new_sequence,
+                });
+            }
+
+            // Option 2: Swap the front piece with the hold piece
+            if let Some(&front) = state.queue.front() {
+                let mut new_queue = state.queue.clone();
+                new_queue.pop_front(); // Remove the front piece from the queue
+
+                if let Some(held_piece) = state.hold {
+                    // If there's a piece in the hold, swap it with the front
+                    let mut swapped_queue = new_queue.clone();
+                    swapped_queue.push_front(held_piece); // Add the held piece back to the front
+                    stack.push(State {
+                        queue: swapped_queue,
+                        hold: Some(front),
+                        sequence: state.sequence.clone(),
+                    });
+                } else {
+                    // If the hold is empty, store the front piece in the hold
+                    stack.push(State {
+                        queue: new_queue,
+                        hold: Some(front),
+                        sequence: state.sequence.clone(),
+                    });
+                }
+            }
+        }
+
+        result
     }
 }
 

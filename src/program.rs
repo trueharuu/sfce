@@ -1,4 +1,4 @@
-use std::{fmt::Write, io::Write as iW, time::Instant};
+use std::{collections::HashSet, fmt::Write, io::Write as iW, time::Instant};
 
 use clap::Parser;
 
@@ -8,7 +8,7 @@ use crate::{
     data::kick::Kickset,
     grid::Grid,
     input::{DropType, Key},
-    pattern::Pattern,
+    pattern::{Pattern, Queue},
     piece::{Piece, Rotation},
     ranged::Ranged,
     text::Text,
@@ -32,27 +32,38 @@ pub struct Program {
 
 #[derive(clap::Args, Clone, Debug)]
 pub struct Options {
-    #[arg(short = 'o')]
+    #[arg(short = 'o', long = "output")]
+    /// Where to output the result. If left blank, prints to stdout.
     pub output: Option<String>,
-    #[arg(short = 'l')]
+    #[arg(short = 'l', long = "link-type")]
+    /// The link type for outputs. Capitalizing this prefixes the link with <https://fumen.zui.jp/>.
     pub link_type: Option<char>,
-    #[arg(short = 'w')]
+    #[arg(short = 'w', long = "width")]
+    /// The assumed width of the given board.
     pub board_width: Option<usize>,
-    #[arg(short = 'h')]
+    #[arg(short = 'h', long = "height")]
+    /// The assumed height of the given board.
     pub board_height: Option<usize>,
-    #[arg(short = 's', default_value = "true")]
+    #[arg(short = 's', long = "stopwatch", default_value = "true")]
+    /// Whether or not to output timing results.
     pub stopwatch: bool,
     #[clap(flatten)]
     pub handling: Handling,
-    #[arg(short = 'm', default_value = "2")]
+    #[arg(short = 'm', long = "margin", default_value = "2")]
+    /// The amount of rows that a piece is allowed to spawn in
     pub board_margin: usize,
     #[arg(long = "no-cache")]
+    /// Whether or not to store and use commonly determined results into/from a file.
     pub no_cache: bool,
     #[arg(long = "pw", default_value = "7")]
+    /// For commands that output many patterns, the amount of patterns to be shown on one line before separating.
     pub pw: usize,
+    #[arg(long = "no-hold", default_value = "false")]
+    /// Whether or not the engine is allowed to use hold.
+    pub no_hold: bool,
 }
 
-#[derive(clap::Args, Clone, Debug, Copy, PartialEq, Eq)]
+#[derive(clap::Args, Clone, Debug, PartialEq, Eq, Copy)]
 pub struct Handling {
     #[arg(short = 'k', long = "kickset", default_value = "srs")]
     /// Which kickset to use.
@@ -63,7 +74,7 @@ pub struct Handling {
     #[arg(short = 'd', long = "drop-type", default_value = "soft")]
     /// The allowed drop type. "none" enforces hard drops, "sonic" is similar to max gravity, and "soft" is regular dropping.
     pub drop_type: DropType,
-    #[arg(short = 'i', default_value = "4")]
+    #[arg(short = 'i', long = "input-count", default_value = "4")]
     /// The maximum amount of inputs you can do for a single piece.
     pub max: usize,
     #[arg(long = "das")]
@@ -175,6 +186,11 @@ pub enum PatternCli {
         #[arg(short = 'p', long = "pattern")]
         pattern: Text<Pattern>,
     },
+    #[command(name = "hold")]
+    Hold {
+        #[arg(short = 'p')]
+        pattern: Text<Pattern>,
+    },
 }
 
 impl Sfce {
@@ -212,7 +228,6 @@ impl Sfce {
                 tetfu,
                 pattern,
                 clears,
-                
             } => self.percent_command(&tetfu.contents(), &pattern.contents(), clears)?,
             SfceCommand::Finesse { tetfu } => self.finesse_command(&tetfu.contents())?,
             SfceCommand::Grid { tetfu } => write!(self.buf, "{}", tetfu.grid().as_deoptimized())?,
@@ -249,6 +264,8 @@ impl Sfce {
                 format!("{t}{}", &f.fumen().encode()[1..])
             } else if t == 'Q' {
                 format!("https://qv.rqft.workers.dev/board?{}", f.fumen().encode())
+            } else if t == 'D' {
+                format!("https://fumen.zui.jp/?D{}", &f.fumen().encode()[1..])
             } else {
                 format!(
                     "https://harddrop.com/fumen?{}{}",
@@ -274,6 +291,15 @@ impl Sfce {
         f.set_margin(self.program.args.board_margin);
 
         f
+    }
+
+    #[must_use]
+    pub fn hold_queues(&self, queue: Queue) -> HashSet<Queue> {
+        if self.program.args.no_hold {
+            HashSet::from([queue])
+        } else {
+            queue.hold_queues()
+        }
     }
 }
 

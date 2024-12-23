@@ -3,6 +3,7 @@
 
 use program::Sfce;
 
+pub mod bits;
 pub mod board;
 pub mod board_parser;
 pub mod caches;

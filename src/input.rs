@@ -12,7 +12,7 @@ use crate::{
     traits::{contiguous_cut_seqs, do_until_same},
 };
 
-#[derive(Clone, Debug, PartialEq, Eq, Copy)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Input<'a> {
     pub piece: Piece,
     pub board: &'a Board,
@@ -93,7 +93,7 @@ impl<'a> Input<'a> {
 
     #[must_use]
     pub fn can_move(&self, direction: Rotation) -> bool {
-        let mut z = *self;
+        let mut z = self.clone();
         match direction {
             Rotation::North => {
                 let old = z.location.1;
@@ -136,7 +136,6 @@ impl<'a> Input<'a> {
         }
     }
 
-    // TODO: use kicksets
     pub fn cw(&mut self) {
         let p = self.placement();
         let ro = p.rotation();
@@ -230,7 +229,7 @@ impl<'a> Input<'a> {
 
     #[must_use]
     pub fn is_useful(&self, key: &[Key]) -> bool {
-        let mut c = *self;
+        let mut c = self.clone();
         c.send_keys(key);
         &c != self
     }
@@ -243,7 +242,7 @@ impl<'a> Input<'a> {
 
     #[must_use]
     pub fn can(&self, key: Key) -> bool {
-        let mut c = *self;
+        let mut c = self.clone();
         c.send_key(key);
         self != &c
     }
@@ -268,7 +267,7 @@ impl<'a> Input<'a> {
         let mut nw = None;
 
         for (before, seq, after) in contiguous_cut_seqs(keys.to_vec()) {
-            let mut cpy = *self;
+            let mut cpy = self.clone();
             cpy.send_keys(&before);
             if !cpy.is_useful(&seq) && seq.len() > longest.clone().map_or(0, |x: Vec<Key>| x.len())
             {
