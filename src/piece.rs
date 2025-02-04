@@ -2,11 +2,11 @@ use std::str::FromStr;
 
 use fumen::CellColor;
 use serde::{Deserialize, Serialize};
-use strum::{Display, EnumString};
+use strum::{Display, EnumIter, EnumString};
 
 use crate::{data::placements::PLACEMENTS, traits::GetWith};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, Hash, Serialize, Deserialize, EnumIter)]
 #[strum(ascii_case_insensitive)]
 pub enum Piece {
     I,
@@ -67,6 +67,19 @@ impl Piece {
             .get_with(|x| x.0 == self && x.1 == rotation)
             .unwrap()
             .2
+    }
+
+    #[must_use]
+    pub fn cells(self, x: usize, y: usize, rotation: Rotation) -> Option<Vec<(usize, usize)>> {
+        let mut a = vec![];
+        for &(ox, oy) in self.offsets(rotation) {
+            let dx = x.checked_add_signed(ox)?;
+            let dy = y.checked_add_signed(oy)?;
+
+            a.push((dx, dy));
+        }
+
+        Some(a)
     }
 }
 

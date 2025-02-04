@@ -149,7 +149,8 @@ impl Queue {
         false // No valid sequence found
     }
 
-    #[must_use] pub fn hold_queues(&self) -> HashSet<Self> {
+    #[must_use]
+    pub fn hold_queues(&self) -> HashSet<Self> {
         #[derive(Debug, PartialEq, Eq, Clone, Hash)]
         struct State {
             queue: VecDeque<Piece>,
@@ -169,11 +170,7 @@ impl Queue {
 
         while let Some(state) = stack.pop() {
             // If we've already visited this state, skip it
-            if !visited.insert((
-                state.queue.clone(),
-                state.hold,
-                state.sequence.clone(),
-            )) {
+            if !visited.insert((state.queue.clone(), state.hold, state.sequence.clone())) {
                 continue;
             }
 
@@ -299,6 +296,7 @@ impl Iter {
         iter
     }
 
+    #[allow(clippy::too_many_lines)]
     fn expand_pattern(&mut self, pattern: &Pattern) {
         for part in &pattern.parts {
             let mut new_queue = VecDeque::new();

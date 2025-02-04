@@ -1,6 +1,7 @@
 use std::{collections::HashSet, fmt::Write, io::Write as iW, time::Instant};
 
 use clap::Parser;
+use itertools::Itertools;
 
 use crate::{
     board_parser::Tetfu,
@@ -44,7 +45,7 @@ pub struct Options {
     #[arg(short = 'h', long = "height")]
     /// The assumed height of the given board.
     pub board_height: Option<usize>,
-    #[arg(short = 's', long = "stopwatch", default_value = "true")]
+    #[arg(short = 's', long = "stopwatch", default_value = "false")]
     /// Whether or not to output timing results.
     pub stopwatch: bool,
     #[clap(flatten)]
@@ -61,6 +62,13 @@ pub struct Options {
     #[arg(long = "no-hold", default_value = "false")]
     /// Whether or not the engine is allowed to use hold.
     pub no_hold: bool,
+    #[arg(long = "no-comments", default_value = "false")]
+    /// Whether or not to include page comments in the output. This significantly shortens fumen URLs.
+    pub no_comments: bool,
+    #[arg(long = "psep", default_value = ";")]
+    pub page_sep: String,
+    #[arg(long = "rsep", default_value = "|")]
+    pub row_sep: String,
 }
 
 #[derive(clap::Args, Clone, Debug, PartialEq, Eq, Copy)]
@@ -74,7 +82,7 @@ pub struct Handling {
     #[arg(short = 'd', long = "drop-type", default_value = "soft")]
     /// The allowed drop type. "none" enforces hard drops, "sonic" is similar to max gravity, and "soft" is regular dropping.
     pub drop_type: DropType,
-    #[arg(short = 'i', long = "input-count", default_value = "4")]
+    #[arg(short = 'i', long = "input-count", default_value = "6")]
     /// The maximum amount of inputs you can do for a single piece.
     pub max: usize,
     #[arg(long = "das")]
@@ -156,6 +164,22 @@ pub enum SfceCommand {
         #[arg(short = 'r')]
         rotation: Rotation,
     },
+
+    Res {
+        #[arg(short = 'n')]
+        n: usize,
+    },
+
+    Congruent {
+        #[arg(short = 't')]
+        tetfu: Text<Tetfu>,
+        #[arg(short = 'p')]
+        pattern: Text<Pattern>,
+        #[arg(short = 'c', default_value = "g")]
+        color: Piece,
+        #[arg(short = 'm')]
+        minimal: bool,
+    },
 }
 
 #[derive(clap::Subcommand, Clone, Debug)]
@@ -163,19 +187,25 @@ pub enum FumenCli {
     #[command(name = "encode")]
     Encode {
         #[arg(short = 't', long = "grid")]
-        grid: Text<String>,
+        grid: Text<Tetfu>,
     },
 
     #[command(name = "decode")]
     Decode {
         #[arg(short = 't', long = "fumen")]
-        fumen: Text<String>,
+        fumen: Text<Tetfu>,
     },
 
     #[command(name = "glue")]
     Glue {
         #[arg(short = 't', long = "fumen")]
         fumen: Text<String>,
+    },
+
+    #[command(name = "optimize")]
+    Optimize {
+        #[arg(short = 't', long = "fumen")]
+        fumen: Text<Tetfu>,
     },
 }
 
@@ -201,7 +231,14 @@ impl Sfce {
 
     #[must_use]
     pub fn new() -> Self {
-        let program = Program::parse();
+        let mut program = Program::parse();
+        if program.args.page_sep == "\\n" {
+            program.args.page_sep = "\n".to_string();
+        }
+        if program.args.row_sep == "\\n" {
+            program.args.row_sep = "\n".to_string();
+        }
+
         Self {
             program,
             caches: Caches::default(),
@@ -237,6 +274,13 @@ impl Sfce {
                 piece,
                 rotation,
             } => self.possible(&tetfu, piece, rotation),
+            SfceCommand::Congruent {
+                tetfu,
+                pattern,
+                color,
+                minimal,
+            } => self.congruent_command(&tetfu, &pattern, color, minimal)?,
+            SfceCommand::Res { n } => self.res_command(n)?,
         }
 
         if let Some(s) = &self.program.args.output {
@@ -259,22 +303,43 @@ impl Sfce {
 
     #[must_use]
     pub fn tetfu(&self, f: &Grid) -> String {
+        let g = if self.program.args.no_comments {
+            Grid::from_pages(
+                f.0.clone()
+                    .iter_mut()
+                    .map(|x| {
+                        x.comment = None;
+                        x.clone()
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        } else {
+            f.clone()
+        };
         if let Some(t) = self.program.args.link_type {
             if t.is_lowercase() {
-                format!("{t}{}", &f.fumen().encode()[1..])
+                format!("{t}{}", &g.fumen().encode()[1..])
             } else if t == 'Q' {
-                format!("https://qv.rqft.workers.dev/board?{}", f.fumen().encode())
+                format!("https://qv.rqft.workers.dev/view?{}", g.fumen().encode())
             } else if t == 'D' {
-                format!("https://fumen.zui.jp/?D{}", &f.fumen().encode()[1..])
+                format!("https://fumen.zui.jp/?D{}", &g.fumen().encode()[1..])
             } else {
                 format!(
                     "https://harddrop.com/fumen?{}{}",
                     t.to_lowercase(),
-                    &f.fumen().encode()[1..]
+                    &g.fumen().encode()[1..]
                 )
             }
         } else {
-            f.to_string()
+            f.pages()
+                .iter()
+                .map(|x| {
+                    x.rows()
+                        .iter()
+                        .map(|x| x.iter().join(""))
+                        .join(&self.program.args.row_sep)
+                })
+                .join(&self.program.args.page_sep)
         }
     }
 

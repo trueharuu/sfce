@@ -105,6 +105,19 @@ impl Board {
     }
 
     #[must_use]
+    pub fn filter<F>(mut self, f: F) -> Self where F: Fn(usize, usize, Piece) -> bool {
+        for x in 0..self.width() {
+            for y in 0..self.height() {
+                if !f(x, y, self.get(x, y)) {
+                    self.set(x, y, Piece::E);
+                }
+            }
+        }
+
+        self
+    }
+
+    #[must_use]
     pub fn to_gray(self) -> Self {
         Self {
             data: self
@@ -306,19 +319,19 @@ impl Board {
                 let dx = placement.x().checked_add_signed(*ox);
                 let dy = placement.y().checked_add_signed(*oy);
                 if let (Some(dx), Some(mut dy)) = (dx, dy) {
+                    if *oy < 0 {
+                        while self.is_cleared(dy) {
+                            dy -= 1;
+                        }
+                    }
+
+                    if *oy > 0 {
+                        while self.is_cleared(dy) {
+                            dy += 1;
+                        }
+                    }
+
                     if self.is_in_bounds(dx, dy) {
-                        if *oy < 0 {
-                            while self.is_cleared(dy) {
-                                dy -= 1;
-                            }
-                        }
-
-                        if *oy > 0 {
-                            while self.is_cleared(dy) {
-                                dy += 1;
-                            }
-                        }
-
                         self.data[dy][dx] = placement.piece();
                     }
                 }

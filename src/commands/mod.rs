@@ -4,3 +4,6 @@ pub mod movec;
 pub mod test;
 pub mod finesse;
 pub mod possible;
+pub mod res;
+pub mod congruent;
+pub mod edit;

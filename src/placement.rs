@@ -82,6 +82,7 @@ impl Placement {
         // println!("trying {keys:?}");
         let mut input = Input::new(board, self.piece(), spawn, Rotation::North, handling);
         input.send_keys(keys);
+
         self == input.placement()
     }
 
@@ -156,6 +157,7 @@ impl Placement {
                     if current_seq.len() > handling.max {
                         return local_new_sequences;
                     }
+                    // println!("{current_seq:?}");
 
                     if self.check_inputs(board, &current_seq, spawn, handling) {
                         let mut candidate_guard = candidate.lock().unwrap();

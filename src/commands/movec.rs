@@ -3,7 +3,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use indicatif::{ProgressBar, ProgressStyle};
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -19,65 +18,71 @@ impl Sfce {
         clears: Ranged<usize>,
         minimal: bool,
     ) -> anyhow::Result<()> {
-        let board = self
-            .resize(tetfu.grid())
-            .pages()
-            .last()
-            .cloned()
-            .unwrap_or_default();
-
-        let pages = Arc::new(Mutex::new(Grid::default()));
-
-        let qbar = ProgressBar::new(pattern.queues().len() as u64);
-        let style = ProgressStyle::default_spinner()
-            .template("{spinner} {prefix} {msg:.bold} [{pos}/{len}]")
-            .unwrap()
-            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
-        qbar.set_prefix("Generating placements for queue");
-        qbar.set_style(style);
-
-        pattern.queues().par_iter().for_each(|queue| {
-            qbar.set_message(
-                queue
-                    .iter()
-                    .map(std::string::ToString::to_string)
-                    .collect::<String>(),
-            );
-            qbar.inc(1);
-
-            for h in self.hold_queues(queue.clone()) {
-                let apoq = self.all_placements_of_queue(&board, h.pieces());
-
-                let ap = apoq
-                    .par_iter()
-                    .map(|x| {
-                        (
-                            x,
-                            board
-                                .with_many_placements(x)
-                                .with_comment(format!("{queue} ({h})")),
-                        )
-                    })
-                    .filter(|x| clears.contains(&x.1.line_clears()))
-                    .fully_dedup_by(|(x, _), (y, _)| {
-                        minimal
-                            && x.iter()
-                                .map(Placement::piece)
-                                .eq(y.iter().map(Placement::piece))
-                    })
-                    .fully_dedup_by_key(|x| x.1.clone())
-                    .filter(|x| self.is_doable(&board, x.0))
-                    .map(|x| x.1)
-                    .collect::<Vec<_>>();
-
-                pages.lock().unwrap().extend(ap);
-            }
-        });
-
-        pages.lock().unwrap().dedup_by_board();
-        write!(self.buf, "{}", self.tetfu(&pages.lock().unwrap()))?;
+        let rs = self.resize(tetfu.grid());
+        let pages = self.move_placements(&rs, pattern, clears, minimal);
+        write!(self.buf, "{}", self.tetfu(&pages))?;
 
         Ok(())
+    }
+
+    #[must_use]
+    pub fn move_placements(
+        &self,
+        rs: &Grid,
+        pattern: &Pattern,
+        clears: Ranged<usize>,
+        minimal: bool,
+    ) -> Grid {
+        let pgs = rs.pages();
+        let pages = Arc::new(Mutex::new(Grid::default()));
+        for board in pgs {
+            // pages
+            //     .lock()
+            //     .unwrap()
+            //     .add_page(board.clone().with_comment(String::new()));
+            pattern.queues().par_iter().for_each(|queue| {
+                if !self.is_queue_placeable(board, queue.pieces()) {
+                    return;
+                }
+
+                self.hold_queues(queue.clone()).par_iter().for_each(|h| {
+                    let apoq = self.all_placements_of_queue(board, h.pieces());
+
+                    let ap = apoq
+                        .par_iter()
+                        .map(|x| {
+                            (
+                                x,
+                                board
+                                    .with_many_placements(x)
+                                    .with_comment(format!("{queue}")),
+                            )
+                        })
+                        .filter(|x| clears.contains(&x.1.line_clears()))
+                        .fully_dedup_by(|(x, _), (y, _)| {
+                            minimal
+                                && x.iter()
+                                    .map(Placement::piece)
+                                    .eq(y.iter().map(Placement::piece))
+                        })
+                        .filter(|x| self.is_doable(board, x.0))
+                        .fully_dedup_by_key(|x| x.1.clone())
+                        .map(|x| x.1)
+                        .collect::<Vec<_>>();
+
+                    pages.lock().unwrap().extend(ap);
+                });
+            });
+        }
+
+        pages.lock().unwrap().dedup_by_board();
+
+        Arc::into_inner(pages).unwrap().into_inner().unwrap()
+    }
+
+    #[must_use]
+    pub fn is_queue_placeable(&self, board: &Board, queue: &[Piece]) -> bool {
+        board.fast().empty_cells().len() >= queue.len() * 4
     }
 
     #[allow(clippy::cast_precision_loss)]
@@ -97,22 +102,13 @@ impl Sfce {
         let s = Arc::new(Mutex::new(vec![]));
         let f = Arc::new(Mutex::new(vec![]));
 
-        let qbar = ProgressBar::new(pattern.queues().len() as u64);
-        let style = ProgressStyle::default_spinner()
-            .template("{spinner} {prefix} {msg:.bold} [{pos}/{len}]")
-            .unwrap()
-            .tick_chars("⠁⠂⠄⡀⢀⠠⠐⠈ ");
-        qbar.set_prefix("Generating placements for queue");
-        qbar.set_style(style);
-
         let z = pattern.queues();
         z.par_iter().for_each(|q| {
-            qbar.set_message(
-                q.iter()
-                    .map(std::string::ToString::to_string)
-                    .collect::<String>(),
-            );
-            qbar.inc(1);
+            if !self.is_queue_placeable(&board, q.pieces()) {
+                f.lock().unwrap().push(q);
+                return;
+            }
+
             let h = self.hold_queues(q.clone());
 
             let success = h.par_iter().any(|queue| {
@@ -195,16 +191,18 @@ impl Sfce {
             return true;
         }
 
-        let mut s = board.clone().skimmed();
+        let mut bc = board.clone();
+        // println!("{bc}");
         for p in placements {
-            let m = p.is_doable(&s.clone().skimmed(), s.spawn(), self.handling());
-
-            if m {
-                s.place(*p);
-                s.skim();
-            } else {
+            let lc = bc.removed_lines().iter().filter(|x| x.0 < p.y()).count();
+            let s = bc.clone().skimmed();
+            let mut c = *p;
+            c.set_y(c.y() - lc);
+            if !c.is_doable(&s, s.spawn(), self.handling()) {
                 return false;
             }
+
+            bc.skim_place(*p);
         }
 
         true

@@ -1,32 +1,36 @@
 use std::{fmt::Write, str::FromStr};
 
-use fumen::Fumen;
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use strum::IntoEnumIterator;
 
 use crate::{
+    board::Board,
     board_parser::Tetfu,
     grid::Grid,
+    piece::{Piece, Rotation},
+    placement::Placement,
     program::{FumenCli, Sfce},
+    traits::CollectVec,
 };
 
 impl Sfce {
     pub fn fumen_commnad(&mut self, l: FumenCli) -> anyhow::Result<()> {
         match l {
-            FumenCli::Encode { grid } => write!(self.buf, "{}", {
+            FumenCli::Encode { grid } => writeln!(self.buf, "{}", {
                 if self.program.args.link_type.is_none() {
                     self.program.args.link_type = Some('v');
                 }
-                self.tetfu(&Grid::new(grid.contents()))
+                self.tetfu(&Grid::new(grid.contents().grid()))
             })?,
-            FumenCli::Decode { fumen } => write!(
-                self.buf,
-                "{}",
-                self.resize(crate::fumen::fumen_to_grid(&Fumen::decode(&fumen)?))
-            )?,
+            FumenCli::Decode { fumen } => {
+                writeln!(self.buf, "{}", self.resize(fumen.contents().grid()))?;
+            }
 
             FumenCli::Glue { fumen } => {
                 let grids = fumen
                     .contents()
                     .split(',')
+                    .filter(|x| !x.is_empty())
                     .map(Tetfu::from_str)
                     .collect::<Result<Vec<_>, _>>()
                     .map_err(|x| anyhow::anyhow!("{x}"))?;
@@ -38,7 +42,11 @@ impl Sfce {
                     }
                 }
 
-                write!(self.buf, "{}", self.tetfu(&fum))?;
+                writeln!(self.buf, "{}", self.tetfu(&fum))?;
+            }
+
+            FumenCli::Optimize { .. } => {
+                // todo
             }
         };
         Ok(())

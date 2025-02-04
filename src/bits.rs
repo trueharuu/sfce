@@ -222,6 +222,8 @@ impl Bits {
         m
     }
 
+    
+
     #[must_use]
     pub fn all_placements_of_piece(&self, piece: Piece) -> Vec<Placement> {
         // dbg!(self.height);
@@ -244,6 +246,16 @@ impl Bits {
             .iter()
             .enumerate()
             .filter(|(_, x)| **x)
+            .map(|(x, _)| (x % self.width, x / self.width))
+            .collect()
+    }
+
+    #[must_use]
+    pub fn empty_cells(&self) -> Vec<(usize, usize)> {
+        self.bits
+            .iter()
+            .enumerate()
+            .filter(|(_, x)| !**x)
             .map(|(x, _)| (x % self.width, x / self.width))
             .collect()
     }

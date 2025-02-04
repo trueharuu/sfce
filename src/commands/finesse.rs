@@ -1,11 +1,8 @@
 use std::fmt::Write;
-
-use itertools::Itertools;
 use strum::IntoEnumIterator;
 
 use crate::{
-    board_parser::Tetfu, input::Input, piece::Rotation, placement::Placement,
-    program::Sfce,
+    board_parser::Tetfu, input::Input, piece::Rotation, placement::Placement, program::Sfce,
 };
 
 impl Sfce {
@@ -31,45 +28,46 @@ impl Sfce {
 
         // println!("{colored_cells:?}");
         if colored_cells.len() != 4 {
-            eprintln!("no placement was found");
+            writeln!(self.buf, "no placement was found")?;
             return Ok(());
         }
 
-        for (x, y, piece) in colored_cells {
+        for &(x, y, piece) in &colored_cells {
             for rotation in Rotation::iter() {
                 let p = Placement::new(piece, x, y, rotation);
-                let trial = board.clone().only_gray();
-                // let trial_p = board.clone().only_gray().with_placement(p);
+                let trial_p = board.clone().only_gray().with_skimmed_placement(p);
                 // println!("{p:?}");
                 // println!("{board}");
                 // println!("{trial}");
                 // println!("{trial_p}");
                 // println!();
-
-                if trial.with_placement(p) == board {
+                if trial_p == board {
                     placements.push(p);
                 }
             }
         }
 
-        let mut hit = false;
-        for p in placements {
-            println!("identified {p:?}");
-            let keys = self.finesse(p, &og);
-            let mut i = Input::new(&og, p.piece(), board.spawn(), Rotation::North, self.handling());
-            if let Some(k) = keys {
-                let v = i.show_inputs(&k);
-                write!(self.buf, "{}", self.tetfu(&v))?;
-                println!("{}", k.iter().map(|x| format!("{x:?}")).join(", "));
-                hit = true;
+        if placements.is_empty() {
+            writeln!(self.buf, "no placement was found")?;
+            return Ok(());
+        }
+
+        for mut p in placements {
+            let py = p.y();
+            for (_, _) in og.removed_lines().iter().filter(|x| x.0 < py) {
+                p.set_y(p.y() - 1);
+            }
+
+            let so = og.clone().skimmed();
+            let f = p.finesse(&so, so.spawn(), self.handling());
+            if let Some(k) = f {
+                let mut i =
+                    Input::new(&so, p.piece(), so.spawn(), Rotation::North, self.handling());
+
+                writeln!(self.buf, "{}", self.tetfu(&i.show_inputs(&k)))?;
                 break;
             }
         }
-
-        if !hit {
-            eprintln!("no placement was possible");
-        }
-        // println!("{:?}", placement);
 
         Ok(())
     }
