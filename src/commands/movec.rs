@@ -45,8 +45,11 @@ impl Sfce {
                     return;
                 }
 
-                self.hold_queues(queue.clone()).par_iter().for_each(|h| {
-                    let apoq = self.all_placements_of_queue(board, h.pieces());
+                self.hold_queues(&queue).par_iter().for_each(|h| {
+                    let apoq = self.all_placements_of_queue(
+                        board,
+                        &h.pieces()[..(board.fast().empty_cells().len() / 4).min(h.len())],
+                    );
 
                     let ap = apoq
                         .par_iter()
@@ -85,69 +88,7 @@ impl Sfce {
         board.fast().empty_cells().len() >= queue.len() * 4
     }
 
-    #[allow(clippy::cast_precision_loss)]
-    pub fn percent_command(
-        &mut self,
-        tetfu: &Tetfu,
-        pattern: &Pattern,
-        clears: Ranged<usize>,
-    ) -> anyhow::Result<()> {
-        let board = self
-            .resize(tetfu.grid())
-            .pages()
-            .last()
-            .cloned()
-            .unwrap_or_default();
-
-        let s = Arc::new(Mutex::new(vec![]));
-        let f = Arc::new(Mutex::new(vec![]));
-
-        let z = pattern.queues();
-        z.par_iter().for_each(|q| {
-            if !self.is_queue_placeable(&board, q.pieces()) {
-                f.lock().unwrap().push(q);
-                return;
-            }
-
-            let h = self.hold_queues(q.clone());
-
-            let success = h.par_iter().any(|queue| {
-                let apoq = self.all_placements_of_queue(&board, queue.pieces());
-
-                apoq.par_iter()
-                    .map(|x| (x, board.with_many_placements(x).with_comment(queue)))
-                    .filter(|x| clears.contains(&x.1.line_clears()))
-                    .any(|x| self.is_doable(&board, x.0))
-            });
-
-            if success {
-                s.lock().unwrap().push(q);
-            } else {
-                f.lock().unwrap().push(q);
-            }
-        });
-
-        let fs = Arc::try_unwrap(s).unwrap().into_inner().unwrap();
-        let ff = Arc::try_unwrap(f).unwrap().into_inner().unwrap();
-
-        writeln!(
-            self.buf,
-            "{}/{} queues ({:.2}%)",
-            fs.len(),
-            fs.len() + ff.len(),
-            100.0 * fs.len() as f64 / (fs.len() + ff.len()) as f64
-        )?;
-        write!(self.buf, "fail queues:")?;
-        for (i, &q) in ff.iter().enumerate() {
-            if i % self.program.args.pw == 0 {
-                writeln!(self.buf)?;
-            }
-            write!(self.buf, "{q} ")?;
-        }
-
-        writeln!(self.buf)?;
-        Ok(())
-    }
+    
 
     #[must_use]
     pub fn all_placements_of_queue(&self, board: &Board, queue: &[Piece]) -> Vec<Vec<Placement>> {
@@ -192,7 +133,7 @@ impl Sfce {
         }
 
         let mut bc = board.clone();
-        // println!("{bc}");
+        // println!("{placements:?}");
         for p in placements {
             let lc = bc.removed_lines().iter().filter(|x| x.0 < p.y()).count();
             let s = bc.clone().skimmed();

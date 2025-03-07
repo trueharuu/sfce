@@ -2,7 +2,7 @@ use std::fmt::Write;
 use strum::IntoEnumIterator;
 
 use crate::{
-    board_parser::Tetfu, input::Input, piece::Rotation, placement::Placement, program::Sfce,
+    board_parser::Tetfu, grid::Grid, input::{Input, Key}, piece::Rotation, placement::Placement, program::Sfce
 };
 
 impl Sfce {
@@ -52,6 +52,7 @@ impl Sfce {
             return Ok(());
         }
 
+        let mut z: Option<(Vec<Key>, Grid)> = None;
         for mut p in placements {
             let py = p.y();
             for (_, _) in og.removed_lines().iter().filter(|x| x.0 < py) {
@@ -64,9 +65,23 @@ impl Sfce {
                 let mut i =
                     Input::new(&so, p.piece(), so.spawn(), Rotation::North, self.handling());
 
-                writeln!(self.buf, "{}", self.tetfu(&i.show_inputs(&k)))?;
-                break;
+                let g = i.show_inputs(&k);
+                if let Some(ref p) = z {
+                    if p.0.len() < k.len() {
+                        continue;
+                    } else {
+                        z = Some((k, g))
+                    }
+                } else {
+                    z = Some((k, g));
+                }
             }
+        }
+
+        if let Some((_, g)) = z {
+            writeln!(self.buf, "{}", self.tetfu(&g))?;
+        } else {
+            writeln!(self.buf, "no finesse found")?;
         }
 
         Ok(())

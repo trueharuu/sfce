@@ -4,15 +4,7 @@ use clap::Parser;
 use itertools::Itertools;
 
 use crate::{
-    board_parser::Tetfu,
-    caches::Caches,
-    data::kick::Kickset,
-    grid::Grid,
-    input::{DropType, Key},
-    pattern::{Pattern, Queue},
-    piece::{Piece, Rotation},
-    ranged::Ranged,
-    text::Text,
+    board_parser::Tetfu, caches::Caches, data::kick::Kickset, grid::Grid, input::{DropType, Key}, pattern::{Pattern, Queue}, piece::{Piece, Rotation}, ranged::Ranged, spin::SpinDetection, text::Text
 };
 
 #[derive(Debug)]
@@ -71,11 +63,11 @@ pub struct Options {
     pub row_sep: String,
 }
 
-#[derive(clap::Args, Clone, Debug, PartialEq, Eq, Copy)]
+#[derive(clap::Args, Clone, Debug, PartialEq, Eq)]
 pub struct Handling {
     #[arg(short = 'k', long = "kickset", default_value = "srs")]
     /// Which kickset to use.
-    pub kickset: Kickset<'static>,
+    pub kickset: Kickset,
     #[arg(short = 'y', long = "use-180")]
     /// Whether or not the engine is allowed to perform 180-degree rotations
     pub use_180: bool,
@@ -94,7 +86,11 @@ pub struct Handling {
     #[arg(long = "ignore")]
     /// Whether or not to ignore the use of inputs for a placement. This may generate some impossible placements.
     pub ignore: bool,
+    #[arg(short = 'r', long = "spin-detection", default_value = "tspins")]
+    pub spin_detection: SpinDetection,
 }
+
+
 
 impl Handling {
     #[must_use]
@@ -180,6 +176,24 @@ pub enum SfceCommand {
         #[arg(short = 'm')]
         minimal: bool,
     },
+
+    Cover {
+        #[arg(short = 't')]
+        tetfu: Text<Tetfu>,
+        #[arg(short = 'p')]
+        pattern: Text<Pattern>,
+        #[arg(short = 'c', default_value = "g")]
+        color: Piece,
+    },
+
+    Send {
+        #[arg(short = 't')]
+        tetfu: Text<Tetfu>,
+        #[arg(short = 'p')]
+        piece: Piece,
+        #[arg(short = 'k', value_delimiter = ',')]
+        keys: Vec<Key>,
+    },
 }
 
 #[derive(clap::Subcommand, Clone, Debug)]
@@ -226,7 +240,7 @@ pub enum PatternCli {
 impl Sfce {
     #[must_use]
     pub fn handling(&self) -> Handling {
-        self.program.args.handling
+        self.program.args.handling.clone()
     }
 
     #[must_use]
@@ -253,7 +267,7 @@ impl Sfce {
         let i = Instant::now();
         // dbg!(&self);
         match self.program.sub.clone() {
-            SfceCommand::Fumen(l) => self.fumen_commnad(l)?,
+            SfceCommand::Fumen(l) => self.fumen_command(l)?,
             SfceCommand::Pattern(l) => self.pattern_command(l)?,
             SfceCommand::Move {
                 tetfu,
@@ -280,6 +294,16 @@ impl Sfce {
                 color,
                 minimal,
             } => self.congruent_command(&tetfu, &pattern, color, minimal)?,
+            SfceCommand::Cover {
+                tetfu,
+                pattern,
+                color,
+            } => self.cover_command(&tetfu, &pattern, color)?,
+            SfceCommand::Send {
+                tetfu,
+                piece,
+                keys,
+            } => self.send_command(&tetfu, piece, keys)?,
             SfceCommand::Res { n } => self.res_command(n)?,
         }
 
@@ -323,6 +347,45 @@ impl Sfce {
                 format!("https://qv.rqft.workers.dev/view?{}", g.fumen().encode())
             } else if t == 'D' {
                 format!("https://fumen.zui.jp/?D{}", &g.fumen().encode()[1..])
+            } else if t == 'T' {
+                let mut z = String::new();
+                z += "\n";
+                for page in g.pages() {
+                    for (i, r) in page.data.iter().rev().enumerate() {
+                        for c in r {
+                            z += "\x1b[48;2;";
+                            z += match c {
+                                Piece::I => "66;175;275",
+                                Piece::J => "17;101;181",
+                                Piece::O => "246;208;60",
+                                Piece::L => "243;137;39",
+                                Piece::Z => "235;79;101",
+                                Piece::S => "81;184;77",
+                                Piece::T => "151;57;162",
+                                Piece::E => "40;40;40",
+                                Piece::G => "134;134;134",
+                                Piece::D => "134;134;134",
+                            };
+
+                            z += "m  \x1b[0m"
+                        }
+
+                        if i == 0 {
+                            if let Some(s) = &page.comment {
+                                z += "\t";
+                                z += &s;
+                            }
+                        }
+
+                        z += "\n";
+                    }
+                    z += "\n";
+                }
+
+                z += "https://qv.rqft.workers.dev/view?";
+                z += &g.fumen().encode();
+
+                z
             } else {
                 format!(
                     "https://harddrop.com/fumen?{}{}",
@@ -359,9 +422,9 @@ impl Sfce {
     }
 
     #[must_use]
-    pub fn hold_queues(&self, queue: Queue) -> HashSet<Queue> {
+    pub fn hold_queues(&self, queue: &Queue) -> HashSet<Queue> {
         if self.program.args.no_hold {
-            HashSet::from([queue])
+            HashSet::from([queue.clone()])
         } else {
             queue.hold_queues()
         }

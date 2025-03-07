@@ -105,7 +105,10 @@ impl Board {
     }
 
     #[must_use]
-    pub fn filter<F>(mut self, f: F) -> Self where F: Fn(usize, usize, Piece) -> bool {
+    pub fn filter<F>(mut self, f: F) -> Self
+    where
+        F: Fn(usize, usize, Piece) -> bool,
+    {
         for x in 0..self.width() {
             for y in 0..self.height() {
                 if !f(x, y, self.get(x, y)) {
@@ -320,7 +323,8 @@ impl Board {
                 let dy = placement.y().checked_add_signed(*oy);
                 if let (Some(dx), Some(mut dy)) = (dx, dy) {
                     if *oy < 0 {
-                        while self.is_cleared(dy) {
+                        while self.is_cleared(dy) && dy != 0 {
+                        //                        ++++++++++   
                             dy -= 1;
                         }
                     }
@@ -333,6 +337,35 @@ impl Board {
 
                     if self.is_in_bounds(dx, dy) {
                         self.data[dy][dx] = placement.piece();
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn skim_place_blind(&mut self, placement: Placement) {
+        self.deoptimize();
+        if let Some(pm) =
+            PLACEMENTS.get_with(|x| x.0 == placement.piece() && x.1 == placement.rotation())
+        {
+            for (ox, oy) in pm.2 {
+                let dx = placement.x().checked_add_signed(*ox);
+                let dy = placement.y().checked_add_signed(*oy);
+                if let (Some(dx), Some(mut dy)) = (dx, dy) {
+                    if *oy < 0 {
+                        while self.is_cleared(dy) {
+                            dy -= 1;
+                        }
+                    }
+
+                    if *oy > 0 {
+                        while self.is_cleared(dy) {
+                            dy += 1;
+                        }
+                    }
+
+                    if self.is_in_bounds(dx, dy) {
+                        self.data[dy][dx] = Piece::D;
                     }
                 }
             }

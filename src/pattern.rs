@@ -12,7 +12,7 @@ use crate::{
     traits::{CollectVec, FullyDedup},
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Pattern {
     pub parts: Vec<Part>,
 }
@@ -279,6 +279,7 @@ pub enum Part {
     Single(Piece),
     Bag(Vec<Self>),
     Except(Vec<Self>),
+    Or(Vec<Pattern>),
     Wildcard,
 }
 
@@ -317,6 +318,13 @@ impl Iter {
                                 let mut combined = current.clone();
                                 combined.0.extend(perm);
                                 new_queue.push_back(combined);
+                            }
+                        }
+                    }
+                    Part::Or(l) => {
+                        for pat in l {
+                            for queue in pat.queues() {
+                                new_queue.push_back(queue);
                             }
                         }
                     }
@@ -480,9 +488,20 @@ pub mod parse {
             .map(|(x, y)| Part::Count(Box::new(x), y));
         let all = group((repeatable.clone(), just("!"))).map(|(x, _)| Part::All(Box::new(x)));
         let part = choice((all, count, repeatable));
-        part.separated_by(just(",").or_not())
+        let sq = part
+            .separated_by(just(",").or_not())
             .allow_trailing()
             .collect()
-            .map(|x| Pattern { parts: x })
+            .map(|x| Pattern { parts: x });
+
+        let or = sq
+            .separated_by(just("|"))
+            .at_least(1)
+            .collect()
+            .map(|x| Pattern {
+                parts: vec![Part::Or(x)],
+            });
+
+        or
     }
 }

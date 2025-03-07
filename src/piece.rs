@@ -1,12 +1,14 @@
-use std::str::FromStr;
+use std::{collections::HashSet, str::FromStr};
 
 use fumen::CellColor;
 use serde::{Deserialize, Serialize};
 use strum::{Display, EnumIter, EnumString};
 
-use crate::{data::placements::PLACEMENTS, traits::GetWith};
+use crate::{data::placements::PLACEMENTS, input::Key, traits::GetWith};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, Hash, Serialize, Deserialize, EnumIter)]
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Display, EnumString, Hash, Serialize, Deserialize, EnumIter,
+)]
 #[strum(ascii_case_insensitive)]
 pub enum Piece {
     I,
@@ -70,13 +72,13 @@ impl Piece {
     }
 
     #[must_use]
-    pub fn cells(self, x: usize, y: usize, rotation: Rotation) -> Option<Vec<(usize, usize)>> {
-        let mut a = vec![];
+    pub fn cells(self, x: usize, y: usize, rotation: Rotation) -> Option<HashSet<(usize, usize)>> {
+        let mut a = HashSet::new();
         for &(ox, oy) in self.offsets(rotation) {
             let dx = x.checked_add_signed(ox)?;
             let dy = y.checked_add_signed(oy)?;
 
-            a.push((dx, dy));
+            a.insert((dx, dy));
         }
 
         Some(a)
@@ -95,10 +97,10 @@ impl FromStr for Rotation {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_ascii_lowercase().as_str() {
-            "up" | "north" => Ok(Self::North),
-            "right" | "east" => Ok(Self::East),
-            "down" | "south" => Ok(Self::South),
-            "left" | "west" => Ok(Self::West),
+            "up" | "north" | "n" => Ok(Self::North),
+            "right" | "east" | "e" => Ok(Self::East),
+            "down" | "south" | "s" => Ok(Self::South),
+            "left" | "west" | "w" => Ok(Self::West),
             c => Err(format!("unknown rotation {c}")),
         }
     }
@@ -133,5 +135,22 @@ impl Rotation {
             Self::East => Self::West,
             Self::West => Self::East,
         }
+    }
+
+    #[must_use]
+    pub fn send_one(self, keys: Key) -> Self {
+        match keys {
+            Key::CCW => self.ccw(),
+            Key::CW => self.cw(),
+            Key::Flip => self.flip(),
+
+            _ => self,
+        }
+    }
+
+    #[must_use]
+    pub fn send(mut self, keys: &[Key]) -> Self {
+        for key in keys { self = self.send_one(*key ) }
+        self
     }
 }

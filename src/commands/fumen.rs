@@ -1,20 +1,13 @@
 use std::{fmt::Write, str::FromStr};
 
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use strum::IntoEnumIterator;
-
 use crate::{
-    board::Board,
     board_parser::Tetfu,
     grid::Grid,
-    piece::{Piece, Rotation},
-    placement::Placement,
     program::{FumenCli, Sfce},
-    traits::CollectVec,
 };
 
 impl Sfce {
-    pub fn fumen_commnad(&mut self, l: FumenCli) -> anyhow::Result<()> {
+    pub fn fumen_command(&mut self, l: FumenCli) -> anyhow::Result<()> {
         match l {
             FumenCli::Encode { grid } => writeln!(self.buf, "{}", {
                 if self.program.args.link_type.is_none() {

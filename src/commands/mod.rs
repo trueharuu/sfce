@@ -7,3 +7,6 @@ pub mod possible;
 pub mod res;
 pub mod congruent;
 pub mod edit;
+pub mod cover;
+pub mod percent;
+pub mod send;

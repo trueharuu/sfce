@@ -1,10 +1,6 @@
-use std::{
-    collections::VecDeque,
-    sync::{Arc, Mutex},
-};
+use std::collections::HashSet;
 
-use dashmap::DashSet;
-use rayon::iter::{IntoParallelIterator, ParallelIterator};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -79,7 +75,9 @@ impl Placement {
         spawn: (usize, usize),
         handling: Handling,
     ) -> bool {
-        // println!("trying {keys:?}");
+        if Rotation::North.send(keys) != self.rotation() {
+            return false;
+        }
         let mut input = Input::new(board, self.piece(), spawn, Rotation::North, handling);
         input.send_keys(keys);
 
@@ -104,7 +102,13 @@ impl Placement {
     #[must_use]
     pub fn is_doable(&self, board: &Board, spawn: (usize, usize), mut handling: Handling) -> bool {
         handling.finesse = false;
+
         self.inputs(board, spawn, handling).is_some()
+    }
+
+    #[must_use]
+    pub fn cells(&self) -> Option<HashSet<(usize, usize)>> {
+        self.piece().cells(self.x(), self.y(), self.rotation())
     }
 }
 
@@ -127,74 +131,19 @@ impl Placement {
         spawn: (usize, usize),
         handling: Handling,
     ) -> Option<Vec<Key>> {
-        let visited = Arc::new(DashSet::new());
-        let candidate: Arc<Mutex<Option<Vec<Key>>>> = Arc::new(Mutex::new(None));
-        let possible_moves = handling.possible_moves();
+        let valid_keys = handling.possible_moves();
 
-        let mut queue = VecDeque::new();
-        queue.push_back(Vec::new());
-
-        while !queue.is_empty() {
-            let batch: Vec<Vec<Key>> = queue.drain(0..queue.len()).collect();
-
-            let new_sequences: Vec<Vec<Key>> = batch
-                .into_par_iter()
-                .flat_map(|current_seq| {
-                    let mut local_new_sequences = Vec::new();
-
-                    if visited.contains(&current_seq) {
-                        return local_new_sequences;
-                    }
-
-                    visited.insert(current_seq.clone());
-
-                    if let Some(ref c) = *candidate.lock().unwrap() {
-                        if c.len() <= current_seq.len() {
-                            return local_new_sequences;
-                        }
-                    }
-
-                    if current_seq.len() > handling.max {
-                        return local_new_sequences;
-                    }
-                    // println!("{current_seq:?}");
-
-                    if self.check_inputs(board, &current_seq, spawn, handling) {
-                        let mut candidate_guard = candidate.lock().unwrap();
-                        if candidate_guard.is_none()
-                            || current_seq.len() < candidate_guard.as_ref().unwrap().len()
-                        {
-                            *candidate_guard = Some(current_seq.clone());
-                            if !handling.finesse {
-                                return vec![];
-                            }
-                        }
-                    }
-
-                    for next_move in &possible_moves {
-                        let mut new_seq = current_seq.clone();
-                        new_seq.push(*next_move);
-
-                        if !visited.contains(&new_seq) {
-                            local_new_sequences.push(new_seq);
-                        }
-                    }
-
-                    local_new_sequences
-                })
-                .collect();
-
-            queue.extend(new_sequences);
-
-            if candidate.lock().unwrap().is_some() {
-                break;
+        for keys in (1..=handling.max).flat_map(|n| valid_keys.clone().into_iter().permutations(n))
+        {
+            let c = self.check_inputs(board, &keys, spawn, handling.clone());
+            if c {
+                // println!("\x1b[32m! {keys:?}\x1b[0m");
+                return Some(keys);
+            } else {
+                // println!("\x1b[31mX {keys:?}\x1b[0m");
             }
         }
 
-        Arc::try_unwrap(candidate)
-            .ok()
-            .unwrap()
-            .into_inner()
-            .unwrap()
+        return None;
     }
 }

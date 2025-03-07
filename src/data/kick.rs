@@ -1,27 +1,59 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
-use crate::{
-    piece::{
-        Piece::{self, I, J, L, O, S, T, Z},
-        Rotation::{self, East as e, North as n, South as s, West as w},
-    },
-    traits::CollectVec,
+use regex::Regex;
+
+use crate::piece::{
+    Piece::{self},
+    Rotation::{self},
 };
 
 // TODO: add kicktables for SRS, SRS+, SRS-X, SRS-jstris
-pub type RawKickset<'a> = &'a [(Piece, Rotation, Rotation, &'a [(isize, isize)])];
-pub type RawOffsets<'a> = &'a [(Piece, Rotation, &'a [(isize, isize)])];
+pub type RawKickset = Vec<(Piece, Rotation, Rotation, Vec<(isize, isize)>)>;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Kickset<'a> {
-    kick: RawKickset<'a>,
-    offset: RawOffsets<'a>,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Kickset {
+    kick: RawKickset,
 }
 
-impl<'a> Kickset<'a> {
+impl Kickset {
     #[must_use]
-    pub fn raw(kick: RawKickset<'a>, offset: RawOffsets<'a>) -> Self {
-        Self { kick, offset }
+    pub fn fetch(path: impl Display) -> Option<Self> {
+        let mr = Regex::new(r"\(.*?([+\-0-9]+).*?,.*?([+\-0-9]+).*?\)").unwrap();
+        let m = std::fs::read_to_string(path.to_string()).ok()?;
+        let mut kset: RawKickset = Vec::new();
+        for l in m.lines().filter(|x| !x.is_empty() && !x.starts_with("#")) {
+            let (key, val) = l.split_once('=').unwrap();
+            let piece = Piece::from_str(&key[0..=0]).unwrap();
+            let ir = Rotation::from_str(&key[2..=2]).unwrap();
+            let fr = Rotation::from_str(&key[3..=3]).unwrap();
+
+            let os = if let Some(z) = val.strip_prefix("&") {
+                let piece = Piece::from_str(&z[0..=0]).unwrap();
+                let ir = Rotation::from_str(&z[2..=2]).unwrap();
+                let fr = Rotation::from_str(&z[3..=3]).unwrap();
+
+                kset.iter()
+                    .find(|(p, i, f, _)| piece == *p && ir == *i && fr == *f)
+                    .map(|x| x.3.clone())
+            } else {
+                let mut os = Vec::new();
+
+                for pair in mr.captures_iter(val) {
+                    // println!("{}", pair.get(1).unwrap().as_str());
+                    // println!("{}", pair.get(2).unwrap().as_str());
+                    os.push((
+                        pair.get(1).unwrap().as_str().parse().unwrap(),
+                        pair.get(2).unwrap().as_str().parse().unwrap(),
+                    ));
+                }
+
+                Some(os)
+            };
+
+            kset.push((piece, ir, fr, os.unwrap()))
+        }
+
+        Some(Self { kick: kset })
     }
     #[must_use]
     pub fn get(
@@ -30,144 +62,18 @@ impl<'a> Kickset<'a> {
         initial_rotation: Rotation,
         final_rotation: Rotation,
     ) -> Vec<(isize, isize)> {
-        let io = self
-            .offset
+        self.kick
             .iter()
-            .find(|x| x.0 == piece && x.1 == initial_rotation)
-            .unwrap();
-        let fo = self
-            .offset
-            .iter()
-            .find(|x| x.0 == piece && x.1 == final_rotation)
-            .unwrap();
-        io.2.iter()
-            .zip(fo.2.iter())
-            .map(|((ix, iy), (fx, fy))| (ix - fx, iy - fy))
-            .vec()
-    }
-
-    #[must_use]
-    pub fn none() -> Self {
-        Self::raw(NONE, DEFAULT_OFFSETS)
-    }
-
-    #[must_use]
-    pub fn srs() -> Self {
-        Self::raw(SRS, DEFAULT_OFFSETS)
+            .find(|(p, i, f, _)| *p == piece && *i == initial_rotation && *f == final_rotation)
+            .map(|x| x.3.clone())
+            .unwrap_or(vec![(0, 0)])
+            .to_vec()
     }
 }
 
-impl FromStr for Kickset<'_> {
+impl FromStr for Kickset {
     type Err = String;
     fn from_str(z: &str) -> Result<Self, Self::Err> {
-        match z.to_ascii_lowercase().as_str() {
-            "none" => Ok(Kickset::none()),
-            "srs" => Ok(Kickset::srs()),
-
-            c => Err(format!("invalid kick table {c}")),
-        }
+        Self::fetch(format!("kick/{z}.kick")).ok_or(format!("invalid kick table {z}"))
     }
 }
-
-macro_rules! kicks {
-  ($($p:ident $l:ident $r:ident $(($q:expr, $v:expr))* ;)*) => {
-      &[$(($p, $l, $r, &[$(($q, $v),)*], ),)*]
-  };
-}
-
-pub const NONE: RawKickset = &[];
-pub const SRS: RawKickset = kicks!(
-  J n e (0, 0) (-1, 0) (-1, 1) (0, -2) (-1, -2);
-  J e n (0, 0) (1, 0) (1, -1) (0, 2) (1, 2);
-  J e s (0, 0) (1, 0) (1, -1) (0, 2) (1, 2);
-  J s e (0, 0) (-1, 0) (-1, 1) (0, -2) (1, -2);
-  J s w (0, 0) (1, 0) (1, 1) (0, -2) (1, -2);
-  J w s (0, 0) (-1, 0) (-1, -1) (0, 2) (-1, 2);
-  J w n (0, 0) (-1, 0) (-1, -1) (0, 2) (-1, 2);
-  J n w (0, 0) (1, 0) (1, 1) (0, -2) (1, -2);
-
-  L n e (0, 0) (-1, 0) (-1, 1) (0, -2) (-1, -2);
-  L e n (0, 0) (1, 0) (1, -1) (0, 2) (1, 2);
-  L e s (0, 0) (1, 0) (1, -1) (0, 2) (1, 2);
-  L s e (0, 0) (-1, 0) (-1, 1) (0, -2) (1, -2);
-  L s w (0, 0) (1, 0) (1, 1) (0, -2) (1, -2);
-  L w s (0, 0) (-1, 0) (-1, -1) (0, 2) (-1, 2);
-  L w n (0, 0) (-1, 0) (-1, -1) (0, 2) (-1, 2);
-  L n w (0, 0) (1, 0) (1, 1) (0, -2) (1, -2);
-
-  S n e (0, 0) (-1, 0) (-1, 1) (0, -2) (-1, -2);
-  S e n (0, 0) (1, 0) (1, -1) (0, 2) (1, 2);
-  S e s (0, 0) (1, 0) (1, -1) (0, 2) (1, 2);
-  S s e (0, 0) (-1, 0) (-1, 1) (0, -2) (1, -2);
-  S s w (0, 0) (1, 0) (1, 1) (0, -2) (1, -2);
-  S w s (0, 0) (-1, 0) (-1, -1) (0, 2) (-1, 2);
-  S w n (0, 0) (-1, 0) (-1, -1) (0, 2) (-1, 2);
-  S n w (0, 0) (1, 0) (1, 1) (0, -2) (1, -2);
-
-  T n e (0, 0) (-1, 0) (-1, 1) (0, -2) (-1, -2);
-  T e n (0, 0) (1, 0) (1, -1) (0, 2) (1, 2);
-  T e s (0, 0) (1, 0) (1, -1) (0, 2) (1, 2);
-  T s e (0, 0) (-1, 0) (-1, 1) (0, -2) (1, -2);
-  T s w (0, 0) (1, 0) (1, 1) (0, -2) (1, -2);
-  T w s (0, 0) (-1, 0) (-1, -1) (0, 2) (-1, 2);
-  T w n (0, 0) (-1, 0) (-1, -1) (0, 2) (-1, 2);
-  T n w (0, 0) (1, 0) (1, 1) (0, -2) (1, -2);
-
-  Z n e (0, 0) (-1, 0) (-1, 1) (0, -2) (-1, -2);
-  Z e n (0, 0) (1, 0) (1, -1) (0, 2) (1, 2);
-  Z e s (0, 0) (1, 0) (1, -1) (0, 2) (1, 2);
-  Z s e (0, 0) (-1, 0) (-1, 1) (0, -2) (1, -2);
-  Z s w (0, 0) (1, 0) (1, 1) (0, -2) (1, -2);
-  Z w s (0, 0) (-1, 0) (-1, -1) (0, 2) (-1, 2);
-  Z w n (0, 0) (-1, 0) (-1, -1) (0, 2) (-1, 2);
-  Z n w (0, 0) (1, 0) (1, 1) (0, -2) (1, -2);
-
-  O n e (0, 0);
-  O e n (0, 0);
-  O e s (0, 0);
-  O s e (0, 0);
-  O s w (0, 0);
-  O w s (0, 0);
-  O w n (0, 0);
-  O n w (0, 0);
-
-  I n e (0, 0) (-2, 0) (1, 0) (-2, -1) (1, 2);
-  I e n (0, 0) (2, 0) (-1, 0) (2, 1) (-1, 2);
-  I e s (0, 0) (-1, 0) (2, 0) (-1, 2) (2, -1);
-  I s e (0, 0) (1, 0) (-2, 0) (1, -2) (-2, 1);
-  I s w (0, 0) (2, 0) (-1, 0) (2, 1) (-1, 2);
-  I w s (0, 0) (-2, 0) (1, 0) (-2, -1) (1, 2);
-  I w n (0, 0) (1, 0) (-2, 0) (1, -2) (-2, 1);
-  I n w (0, 0) (-1, 0) (2, 0) (-1, 2) (2, -1);
-);
-
-pub const DEFAULT_OFFSETS: RawOffsets = &[
-    (J, n, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
-    (J, e, &[(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]),
-    (J, s, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
-    (J, w, &[(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]),
-    (L, n, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
-    (L, e, &[(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]),
-    (L, s, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
-    (L, w, &[(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]),
-    (S, n, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
-    (S, e, &[(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]),
-    (S, s, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
-    (S, w, &[(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]),
-    (T, n, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
-    (T, e, &[(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]),
-    (T, s, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
-    (T, w, &[(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]),
-    (Z, n, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
-    (Z, e, &[(0, 0), (1, 0), (1, -1), (0, 2), (1, 2)]),
-    (Z, s, &[(0, 0), (0, 0), (0, 0), (0, 0), (0, 0)]),
-    (Z, w, &[(0, 0), (-1, 0), (-1, -1), (0, 2), (-1, 2)]),
-    (I, n, &[(0, 0), (-1, 0), (2, 0), (-1, 0), (2, 0)]),
-    (I, e, &[(-1, 0), (0, 0), (0, 0), (0, 1), (0, -2)]),
-    (I, s, &[(-1, 1), (1, 1), (-2, 1), (1, 0), (-2, 0)]),
-    (I, w, &[(0, 1), (0, 1), (0, 1), (0, -1), (0, 2)]),
-    (O, n, &[(0, 0)]),
-    (O, e, &[(0, -1)]),
-    (O, s, &[(-1, -1)]),
-    (O, w, &[(-1, 0)]),
-];

@@ -321,3 +321,22 @@ impl FromStr for DropType {
         }
     }
 }
+
+impl FromStr for Key {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_ascii_lowercase().as_str() {
+            "hd" => Ok(Self::HardDrop),
+            "sf" => Ok(Self::SoftDrop),
+            "l" => Ok(Self::MoveLeft),
+            "dl" => Ok(Self::DasLeft),
+            "r" => Ok(Self::MoveRight),
+            "dr" => Ok(Self::DasRight),
+            "cw" => Ok(Self::CW),
+            "ccw" => Ok(Self::CCW),
+            "sd" => Ok(Self::SonicDrop),
+            "f" => Ok(Self::Flip),
+            _ => Err("unknown key".to_string()),
+        }
+    }
+}

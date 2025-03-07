@@ -1,4 +1,4 @@
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not};
+use std::{collections::HashSet, ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not}};
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -217,7 +217,7 @@ impl Bits {
             }
         }
 
-        m.add_back(&rm, false);
+        m.add_back(&rm.into_iter().collect_vec(), false);
 
         m
     }
@@ -241,7 +241,7 @@ impl Bits {
     }
 
     #[must_use]
-    pub fn filled_cells(&self) -> Vec<(usize, usize)> {
+    pub fn filled_cells(&self) -> HashSet<(usize, usize)> {
         self.bits
             .iter()
             .enumerate()
@@ -251,7 +251,7 @@ impl Bits {
     }
 
     #[must_use]
-    pub fn empty_cells(&self) -> Vec<(usize, usize)> {
+    pub fn empty_cells(&self) -> HashSet<(usize, usize)> {
         self.bits
             .iter()
             .enumerate()
@@ -261,7 +261,7 @@ impl Bits {
     }
 
     #[must_use]
-    pub fn removed_lines(&self) -> Vec<usize> {
+    pub fn removed_lines(&self) -> HashSet<usize> {
         self.bits
             .chunks_exact(self.width)
             .enumerate()

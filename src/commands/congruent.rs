@@ -1,91 +1,67 @@
-use std::{
-    fmt::Write as _,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashSet, fmt::Write as _};
+
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
-use strum::IntoEnumIterator;
 
 use crate::{
-    board::Board,
-    board_parser::Tetfu,
-    grid::Grid,
-    pattern::Pattern,
-    piece::{Piece, Rotation},
-    placement::Placement,
-    program::Sfce,
-    traits::{CollectVec, FullyDedupParallel},
+    board::Board, board_parser::Tetfu, grid::Grid, pattern::Pattern, piece::Piece,
+    placement::Placement, program::Sfce,
 };
 
 impl Sfce {
-    // TODO: handle skims
     pub fn congruent_command(
         &mut self,
         tetfu: &Tetfu,
         pattern: &Pattern,
         color: Piece,
-        minimal: bool,
+        _minimal: bool,
     ) -> anyhow::Result<()> {
-        let p = self.resize(tetfu.grid()).page();
+        let pgs = tetfu.pages();
 
-        let grid = Arc::new(Mutex::new(Grid::default()));
+        let z = pgs.first().unwrap().clone();
+        let cspots = z.clone().filter(|_, _, c| c == color).fast().filled_cells();
+        let board = z.clone().filter(|_, _, c| c != color);
+        let mut g = Grid::default();
+        let mut seen_queues = HashSet::new();
+        for q in pattern.queues() {
+            if seen_queues.contains(&q) {
+                continue; 
+            }
+            for hq in self.hold_queues(&q) {
+                if seen_queues.contains(&q) || seen_queues.contains(&hq) {
+                    // println!("seen {q} before!");
+                    continue;
+                }
+                let pms = self.congruent_many(&board, cspots.clone(), hq.pieces());
 
-        let og = p.clone().filter(|_, _, p| p != color);
-        let target = p.clone().filter(|_, _, p| p == color);
+                for pm in pms {
+                    if self.is_doable(&board, &pm) {
+                        seen_queues.insert(q.clone());
+                        seen_queues.insert(hq.clone());
+                        g.add_page((z.clone() | board.with_many_placements(&pm)).with_comment(&q));
+                    }
+                }
+            }
+        }
 
-        pattern.queues().into_par_iter().for_each(|q| {
-
-            grid.lock().unwrap().extend(
-                q.hold_queues()
-                    .into_par_iter()
-                    .flat_map(|h| {
-                        self.congruent_placements_of_queue(&target, h.pieces())
-                            .into_par_iter()
-                    })
-                    .filter(|z| self.is_doable(&og, z))
-                    .map(|z| {
-                        (
-                            z.clone(),
-                            p.clone()
-                                .to_gray()
-                                .with_many_placements(&z)
-                                .with_comment(format!("{q}")),
-                        )
-                    })
-                    .fully_dedup_by(|(x, _), (y, _)| {
-                        minimal
-                            && x.iter()
-                                .map(Placement::piece)
-                                .eq(y.iter().map(Placement::piece))
-                    })
-                    .map(|x| x.1)
-                    .collect::<Vec<_>>(),
-            );
-        });
-
-        grid.lock().unwrap().dedup_by_board();
-
-        writeln!(
-            self.buf,
-            "{}",
-            self.tetfu(&Arc::into_inner(grid).unwrap().into_inner().unwrap())
-        )?;
+        writeln!(self.buf, "{}", self.tetfu(&g))?;
 
         Ok(())
     }
 
-    #[must_use]
-    pub fn congruent_placements_of_queue(
+    pub fn congruent_many(
         &self,
         board: &Board,
+        cspots: HashSet<(usize, usize)>,
         queue: &[Piece],
     ) -> Vec<Vec<Placement>> {
         if queue.is_empty() {
             return vec![vec![]];
         }
 
+        // i can haz optimizationburger?
         if queue.len() == 1 {
             return self
-                .congruent_placements_of_piece(board, queue[0])
+                .congruent_single(board, cspots.clone(), queue[0])
                 .iter()
                 .map(|x| vec![*x])
                 .collect();
@@ -93,17 +69,21 @@ impl Sfce {
 
         let piece = queue[0];
         let remaining_queue = &queue[1..];
-        let placements = self.congruent_placements_of_piece(board, piece);
+        let placements = self.congruent_single(board, cspots.clone(), piece);
 
         placements
             .into_par_iter()
             .map(|p| {
-                let used_cells = p.piece().cells(p.x(), p.y(), p.rotation()).unwrap();
-                let s = board
-                    .clone()
-                    .filter(|x, y, _| !used_cells.contains(&(x, y)));
+                let mut s = board.clone();
+                s.skim_place(p);
 
-                let sub_placements = self.congruent_placements_of_queue(&s, remaining_queue);
+                let nc = cspots
+                    .iter()
+                    .filter(|x| !p.cells().unwrap().contains(x))
+                    .copied()
+                    .collect();
+
+                let sub_placements = self.congruent_many(&s, nc, remaining_queue);
 
                 sub_placements.into_par_iter().map(move |mut sr| {
                     sr.insert(0, p);
@@ -114,22 +94,21 @@ impl Sfce {
             .collect()
     }
 
-    #[must_use]
-    pub fn congruent_placements_of_piece(&self, board: &Board, piece: Piece) -> Vec<Placement> {
-        Rotation::iter()
-            .flat_map(|r| {
-                board
-                    .fast()
-                    .filled_cells()
-                    .iter()
-                    .map(|(x, y)| Placement::new(piece, *x, *y, r))
-                    .filter(|x| {
-                        piece.cells(x.x(), x.y(), x.rotation()).is_some_and(|x| {
-                            x.iter().all(|x| board.fast().filled_cells().contains(x))
-                        })
-                    })
-                    .vec()
+    pub fn congruent_single(
+        &self,
+        board: &Board,
+        cspots: HashSet<(usize, usize)>,
+        piece: Piece,
+    ) -> Vec<Placement> {
+        // println!("searching for {piece} within {cspots:?}");
+        self.all_placements_of_piece(board, piece)
+            .into_par_iter()
+            .filter(|x| {
+                x.cells()
+                    .unwrap()
+                    .into_par_iter()
+                    .all(|(x, y)| cspots.contains(&(x, y)))
             })
-            .vec()
+            .collect()
     }
 }
