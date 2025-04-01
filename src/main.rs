@@ -20,7 +20,6 @@ pub mod ranged;
 pub mod text;
 pub mod traits;
 pub mod set;
-pub mod spin;
 
 fn main() {
     let mut p = Sfce::new();

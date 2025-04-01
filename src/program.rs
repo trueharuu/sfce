@@ -4,7 +4,7 @@ use clap::Parser;
 use itertools::Itertools;
 
 use crate::{
-    board_parser::Tetfu, caches::Caches, data::kick::Kickset, grid::Grid, input::{DropType, Key}, pattern::{Pattern, Queue}, piece::{Piece, Rotation}, ranged::Ranged, spin::SpinDetection, text::Text
+    board_parser::Tetfu, caches::Caches, data::kick::Kickset, grid::Grid, input::{DropType, Key}, pattern::{Pattern, Queue}, piece::{Piece, Rotation}, ranged::Ranged, text::Text
 };
 
 #[derive(Debug)]
@@ -86,8 +86,6 @@ pub struct Handling {
     #[arg(long = "ignore")]
     /// Whether or not to ignore the use of inputs for a placement. This may generate some impossible placements.
     pub ignore: bool,
-    #[arg(short = 'r', long = "spin-detection", default_value = "tspins")]
-    pub spin_detection: SpinDetection,
 }
 
 
@@ -134,14 +132,6 @@ pub enum SfceCommand {
         #[arg(short = 'm')]
         minimal: bool,
     },
-    Percent {
-        #[arg(short = 't', long = "tetfu")]
-        tetfu: Text<Tetfu>,
-        #[arg(short = 'p', long = "pattern")]
-        pattern: Text<Pattern>,
-        #[arg(short = 'c', default_value = "..")]
-        clears: Ranged<usize>,
-    },
     Test,
     Grid {
         #[arg(short = 't')]
@@ -161,11 +151,6 @@ pub enum SfceCommand {
         rotation: Rotation,
     },
 
-    Res {
-        #[arg(short = 'n')]
-        n: usize,
-    },
-
     Congruent {
         #[arg(short = 't')]
         tetfu: Text<Tetfu>,
@@ -175,15 +160,6 @@ pub enum SfceCommand {
         color: Piece,
         #[arg(short = 'm')]
         minimal: bool,
-    },
-
-    Cover {
-        #[arg(short = 't')]
-        tetfu: Text<Tetfu>,
-        #[arg(short = 'p')]
-        pattern: Text<Pattern>,
-        #[arg(short = 'c', default_value = "g")]
-        color: Piece,
     },
 
     Send {
@@ -275,11 +251,6 @@ impl Sfce {
                 clears,
                 minimal,
             } => self.move_command(&tetfu.contents(), &pattern.contents(), clears, minimal)?,
-            SfceCommand::Percent {
-                tetfu,
-                pattern,
-                clears,
-            } => self.percent_command(&tetfu.contents(), &pattern.contents(), clears)?,
             SfceCommand::Finesse { tetfu } => self.finesse_command(&tetfu.contents())?,
             SfceCommand::Grid { tetfu } => write!(self.buf, "{}", tetfu.grid().as_deoptimized())?,
             SfceCommand::Test => self.test_command()?,
@@ -294,17 +265,11 @@ impl Sfce {
                 color,
                 minimal,
             } => self.congruent_command(&tetfu, &pattern, color, minimal)?,
-            SfceCommand::Cover {
-                tetfu,
-                pattern,
-                color,
-            } => self.cover_command(&tetfu, &pattern, color)?,
             SfceCommand::Send {
                 tetfu,
                 piece,
                 keys,
-            } => self.send_command(&tetfu, piece, keys)?,
-            SfceCommand::Res { n } => self.res_command(n)?,
+            } => self.send_command(&tetfu, piece, &keys)?,
         }
 
         if let Some(s) = &self.program.args.output {
