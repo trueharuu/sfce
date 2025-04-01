@@ -74,6 +74,6 @@ impl Kickset {
 impl FromStr for Kickset {
     type Err = String;
     fn from_str(z: &str) -> Result<Self, Self::Err> {
-        Self::fetch(format!("kick/{z}.kick")).ok_or(format!("invalid kick table {z}"))
+        Self::fetch(format!("tables/{z}.kick")).ok_or(format!("invalid kick table {z}"))
     }
 }
