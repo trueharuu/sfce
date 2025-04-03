@@ -1,14 +1,11 @@
-use std::{
-    fmt::Write,
-    sync::{Arc, Mutex},
-};
+use std::{collections::HashSet, fmt::Write};
 
 use itertools::Itertools;
-use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::iter::{IntoParallelIterator, ParallelIterator};
 
 use crate::{
     board::Board, board_parser::Tetfu, grid::Grid, pattern::Pattern, piece::Piece,
-    placement::Placement, program::Sfce, ranged::Ranged, traits::FullyDedupParallel,
+    placement::Placement, program::Sfce, ranged::Ranged,
 };
 
 impl Sfce {
@@ -20,88 +17,60 @@ impl Sfce {
         minimal: bool,
         continuous_clears: Ranged<usize>,
     ) -> anyhow::Result<()> {
-        let rs = self.resize(tetfu.grid());
-        let pages = self.move_placements(&rs, pattern, clears, minimal, continuous_clears);
+        let rs = self.resize(tetfu.grid()).page();
+
+        let mut m = Grid::from_pages([]);
+        for q in pattern.queues() {
+            for hq in self.hold_queues(&q) {
+                let pms = self.all_placements_of_queue(&rs, hq.pieces());
+
+                let mut s = HashSet::new();
+                for pm in pms {
+                    // println!("{pm:?}");
+                    let vv = rs.with_many_placements(&pm);
+                    if !clears.contains(&vv.line_clears()) {
+                        continue;
+                    }
+                    if !self.keeps_continuous_clears(&pm, &rs, continuous_clears) {
+                        continue;
+                    }
+
+                    if !self.is_doable(&rs, &pm) {
+                        continue;
+                    }
+
+                    // println!("{vv:?}");
+                    if minimal && s.contains(&vv.to_string()) {
+                        continue;
+                    }
+
+                    s.insert(vv.to_string());
+
+                    m.add_page(vv);
+
+                    if self.program.args.raw {
+                        writeln!(
+                            self.buf,
+                            "{}",
+                            pm.iter()
+                                .map(|x| format!(
+                                    "{},{},{},{}",
+                                    x.piece(),
+                                    x.x(),
+                                    x.y(),
+                                    x.rotation()
+                                ))
+                                .join(";")
+                        )?;
+                    }
+                }
+            }
+        }
+
         if !self.program.args.raw {
-            write!(self.buf, "{}", self.tetfu(&pages))?;
+            write!(self.buf, "{}", self.tetfu(&m))?;
         }
         Ok(())
-    }
-
-    #[must_use]
-    pub fn move_placements(
-        &self,
-        rs: &Grid,
-        pattern: &Pattern,
-        clears: Ranged<usize>,
-        minimal: bool,
-        continuous_clears: Ranged<usize>,
-    ) -> Grid {
-        let pgs = rs.pages();
-        let pages = Arc::new(Mutex::new(Grid::default()));
-        for board in pgs {
-            // pages
-            //     .lock()
-            //     .unwrap()
-            //     .add_page(board.clone().with_comment(String::new()));
-            pattern.queues().par_iter().for_each(|queue| {
-                if !self.is_queue_placeable(board, queue.pieces()) {
-                    return;
-                }
-
-                self.hold_queues(&queue).par_iter().for_each(|h| {
-                    let apoq = self.all_placements_of_queue(
-                        board,
-                        &h.pieces()[..(board.fast().empty_cells().len() / 4).min(h.len())],
-                    );
-
-                    let ap = apoq
-                        .par_iter()
-                        .map(|x| {
-                            (
-                                x,
-                                board
-                                    .with_many_placements(x)
-                                    .with_comment(format!("{queue}")),
-                            )
-                        })
-                        .filter(|x| clears.contains(&x.1.line_clears()))
-                        .filter(|(pms, _)| self.keeps_continuous_clears(pms, board, continuous_clears))
-                        .fully_dedup_by(|(x, _), (y, _)| {
-                            minimal
-                                && x.iter()
-                                    .map(Placement::piece)
-                                    .eq(y.iter().map(Placement::piece))
-                        })
-                        .filter(|x| self.is_doable(board, x.0))
-                        .fully_dedup_by_key(|x| x.1.clone())
-                        .map(|x| {
-                            if self.program.args.raw {
-                                println!(
-                                    "{}",
-                                    x.0.iter()
-                                        .map(|x| format!(
-                                            "{},{},{},{}",
-                                            x.piece(),
-                                            x.x(),
-                                            x.y(),
-                                            x.rotation()
-                                        ))
-                                        .join(";")
-                                );
-                            }
-                            x.1
-                        })
-                        .collect::<Vec<_>>();
-
-                    pages.lock().unwrap().extend(ap);
-                });
-            });
-        }
-
-        pages.lock().unwrap().dedup_by_board();
-
-        Arc::into_inner(pages).unwrap().into_inner().unwrap()
     }
 
     #[must_use]
@@ -121,7 +90,7 @@ impl Sfce {
 
         let mut bc = board.clone();
         let mut lc = bc.line_clears();
-        
+
         for pm in placements {
             bc.skim_place(*pm);
             let diff = bc.line_clears() - lc;

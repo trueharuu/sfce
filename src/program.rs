@@ -139,7 +139,7 @@ pub enum SfceCommand {
         clears: Ranged<usize>,
         #[arg(short = 'm')]
         minimal: bool,
-        #[arg(short = 'q')]
+        #[arg(short = 'q', default_value = "..")]
         continuous_clears: Ranged<usize>,
     },
     Test,
