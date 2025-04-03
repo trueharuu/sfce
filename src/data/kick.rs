@@ -19,7 +19,19 @@ impl Kickset {
     #[must_use]
     pub fn fetch(path: impl Display) -> Option<Self> {
         let mr = Regex::new(r"\(.*?([+\-0-9]+).*?,.*?([+\-0-9]+).*?\)").unwrap();
-        let m = std::fs::read_to_string(path.to_string()).ok()?;
+        let binding = std::env::current_exe()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .join(path.to_string());
+        let ptf = binding
+            .to_str()
+            .unwrap();
+        let m = std::fs::read_to_string(ptf.to_string()).ok()?;
         let mut kset: RawKickset = Vec::new();
         for l in m.lines().filter(|x| !x.is_empty() && !x.starts_with("#")) {
             let (key, val) = l.split_once('=').unwrap();

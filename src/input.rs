@@ -1,4 +1,4 @@
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 use strum::EnumIter;
@@ -338,5 +338,26 @@ impl FromStr for Key {
             "f" => Ok(Self::Flip),
             _ => Err("unknown key".to_string()),
         }
+    }
+}
+
+impl Display for Key {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::HardDrop => "hd",
+                Self::SoftDrop => "sf",
+                Self::MoveLeft => "l",
+                Self::DasLeft => "dl",
+                Self::MoveRight => "r",
+                Self::DasRight => "dr",
+                Self::CW => "cw",
+                Self::CCW => "ccw",
+                Self::SonicDrop => "sd",
+                Self::Flip => "f",
+            }
+        )
     }
 }

@@ -1,8 +1,10 @@
 use std::fmt::Write;
+use chumsky::extra::Err;
+use itertools::Itertools;
 use strum::IntoEnumIterator;
 
 use crate::{
-    board_parser::Tetfu, grid::Grid, input::{Input, Key}, piece::Rotation, placement::Placement, program::Sfce
+    board_parser::Tetfu, grid::Grid, input::{Input, Key}, piece::{Piece, Rotation}, placement::Placement, program::Sfce
 };
 
 impl Sfce {
@@ -53,17 +55,18 @@ impl Sfce {
         }
 
         let mut z: Option<(Vec<Key>, Grid)> = None;
-        for mut p in placements {
-            let py = p.y();
+        for mut pl in placements {
+            println!("{pl:?}");
+            let py = pl.y();
             for (_, _) in og.removed_lines().iter().filter(|x| x.0 < py) {
-                p.set_y(p.y() - 1);
+                pl.set_y(pl.y() - 1);
             }
 
             let so = og.clone().skimmed();
-            let f = p.finesse(&so, so.spawn(), self.handling());
+            let f = pl.finesse(&so, so.spawn(), self.handling());
             if let Some(k) = f {
                 let mut i =
-                    Input::new(&so, p.piece(), so.spawn(), Rotation::North, self.handling());
+                    Input::new(&so, pl.piece(), so.spawn(), Rotation::North, self.handling());
 
                 let g = i.show_inputs(&k);
                 if let Some(ref p) = z {
@@ -85,5 +88,18 @@ impl Sfce {
         }
 
         Ok(())
+    }
+
+    pub fn inputs(&mut self, tetfu: &Tetfu, piece: Piece, x: usize, y: usize, r: Rotation) -> anyhow::Result<()> {
+        let board = self.resize(tetfu.grid()).page();
+        let p = Placement::new(piece, x, y, r);
+        let ks = p.finesse(&board, board.spawn(), self.handling());
+
+        if let Some(k) = ks {
+            writeln!(self.buf, "{}", k.iter().join(","))?;
+            return Ok(())
+        } else {
+            anyhow::bail!("no inputs found");
+        }
     }
 }

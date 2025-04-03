@@ -1,4 +1,4 @@
-use std::{collections::HashSet, str::FromStr};
+use std::{collections::HashSet, fmt::Display, str::FromStr};
 
 use fumen::CellColor;
 use serde::{Deserialize, Serialize};
@@ -106,6 +106,21 @@ impl FromStr for Rotation {
     }
 }
 
+impl Display for Rotation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::North => "N",
+                Self::East => "E",
+                Self::South => "S",
+                Self::West => "W",
+            }
+        )
+    }
+}
+
 impl Rotation {
     #[must_use]
     pub fn cw(self) -> Self {
@@ -150,7 +165,9 @@ impl Rotation {
 
     #[must_use]
     pub fn send(mut self, keys: &[Key]) -> Self {
-        for key in keys { self = self.send_one(*key ) }
+        for key in keys {
+            self = self.send_one(*key)
+        }
         self
     }
 }

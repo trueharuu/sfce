@@ -3,6 +3,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, IntoParallelRefIterator, ParallelIterator};
 
 use crate::{
@@ -17,11 +18,13 @@ impl Sfce {
         pattern: &Pattern,
         clears: Ranged<usize>,
         minimal: bool,
+        continuous_clears: Ranged<usize>,
     ) -> anyhow::Result<()> {
         let rs = self.resize(tetfu.grid());
-        let pages = self.move_placements(&rs, pattern, clears, minimal);
-        write!(self.buf, "{}", self.tetfu(&pages))?;
-
+        let pages = self.move_placements(&rs, pattern, clears, minimal, continuous_clears);
+        if !self.program.args.raw {
+            write!(self.buf, "{}", self.tetfu(&pages))?;
+        }
         Ok(())
     }
 
@@ -32,6 +35,7 @@ impl Sfce {
         pattern: &Pattern,
         clears: Ranged<usize>,
         minimal: bool,
+        continuous_clears: Ranged<usize>,
     ) -> Grid {
         let pgs = rs.pages();
         let pages = Arc::new(Mutex::new(Grid::default()));
@@ -62,6 +66,7 @@ impl Sfce {
                             )
                         })
                         .filter(|x| clears.contains(&x.1.line_clears()))
+                        .filter(|(pms, _)| self.keeps_continuous_clears(pms, board, continuous_clears))
                         .fully_dedup_by(|(x, _), (y, _)| {
                             minimal
                                 && x.iter()
@@ -70,7 +75,23 @@ impl Sfce {
                         })
                         .filter(|x| self.is_doable(board, x.0))
                         .fully_dedup_by_key(|x| x.1.clone())
-                        .map(|x| x.1)
+                        .map(|x| {
+                            if self.program.args.raw {
+                                println!(
+                                    "{}",
+                                    x.0.iter()
+                                        .map(|x| format!(
+                                            "{},{},{},{}",
+                                            x.piece(),
+                                            x.x(),
+                                            x.y(),
+                                            x.rotation()
+                                        ))
+                                        .join(";")
+                                );
+                            }
+                            x.1
+                        })
                         .collect::<Vec<_>>();
 
                     pages.lock().unwrap().extend(ap);
@@ -88,7 +109,33 @@ impl Sfce {
         board.fast().empty_cells().len() >= queue.len() * 4
     }
 
-    
+    pub fn keeps_continuous_clears(
+        &self,
+        placements: &[Placement],
+        board: &Board,
+        continuous_clears: Ranged<usize>,
+    ) -> bool {
+        if self.handling().ignore {
+            return true;
+        }
+
+        let mut bc = board.clone();
+        let mut lc = bc.line_clears();
+        
+        for pm in placements {
+            bc.skim_place(*pm);
+            let diff = bc.line_clears() - lc;
+            // println!("{diff}");
+
+            if !continuous_clears.contains(&diff) {
+                return false;
+            }
+
+            lc = bc.line_clears();
+        }
+
+        true
+    }
 
     #[must_use]
     pub fn all_placements_of_queue(&self, board: &Board, queue: &[Piece]) -> Vec<Vec<Placement>> {
