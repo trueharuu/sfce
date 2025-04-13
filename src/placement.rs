@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, fmt::Display};
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -109,6 +109,12 @@ impl Placement {
     #[must_use]
     pub fn cells(&self) -> Option<HashSet<(usize, usize)>> {
         self.piece().cells(self.x(), self.y(), self.rotation())
+    }
+}
+
+impl Display for Placement {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{},{},{},{}", self.piece(), self.x(), self.y(), self.rotation())
     }
 }
 

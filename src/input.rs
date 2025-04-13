@@ -254,6 +254,7 @@ impl<'a> Input<'a> {
         g.add_page(self.place().with_comment("Spawn"));
         for key in keys {
             self.send_key(*key);
+            
             g.add_page(self.place().with_comment(format!("{key:?}")));
         }
 

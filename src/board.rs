@@ -1,18 +1,11 @@
-use std::{fmt::Display, ops::BitOr};
+use std::{collections::HashSet, fmt::Display, ops::BitOr};
 
 use chumsky::Parser;
 use fumen::Fumen;
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    bits::Bits,
-    data::placements::PLACEMENTS,
-    grid::Grid,
-    piece::Piece,
-    placement::Placement,
-    traits::{CollectVec, GetWith},
-};
+use crate::{bits::Bits, grid::Grid, piece::Piece, placement::Placement, traits::CollectVec};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Board {
@@ -209,68 +202,6 @@ impl Board {
     }
 
     #[must_use]
-    pub fn is_valid_placement(&self, placement: Placement, allow_floating: bool) -> bool {
-        let s = self.clone().as_deoptimized();
-        if let Some(pm) =
-            PLACEMENTS.get_with(|x| x.0 == placement.piece() && x.1 == placement.rotation())
-        {
-            let mut trials = vec![];
-            for offset in pm.2 {
-                if let (Some(dx), Some(dy)) = (
-                    placement.x().checked_add_signed(offset.0),
-                    placement.y().checked_add_signed(offset.1),
-                ) {
-                    // if the piece can't fit in the board it's bad
-                    if !s.is_in_bounds(dx, dy) {
-                        return false;
-                    }
-
-                    // if the piece intersects the board it's bad
-                    if s.data[dy][dx].is_filled() {
-                        return false;
-                    }
-
-                    // check the cell below
-                    if let Some(ry) = dy.checked_sub(1) {
-                        if s.is_in_bounds(dx, ry) {
-                            let cell_below = s.data[dy - 1][dx];
-                            trials.push(cell_below);
-                        } else {
-                            trials.push(Piece::D);
-                        }
-                    } else {
-                        trials.push(Piece::D);
-                    }
-                } else {
-                    return false;
-                }
-            }
-
-            // dbg!(&trials);
-
-            // if the piece is floating (all cells directly below it are empty)
-            if !allow_floating && !trials.iter().any(|x| x.is_filled()) {
-                return false;
-            }
-
-            if !allow_floating && s.intersects_margin() {
-                return false;
-            }
-
-            true
-        } else {
-            false
-        }
-    }
-
-    #[must_use]
-    pub fn is_valid_placement_with_skim(&self, placement: Placement, allow_floating: bool) -> bool {
-        self.clone()
-            .skimmed()
-            .is_valid_placement(placement, allow_floating)
-    }
-
-    #[must_use]
     pub fn is_in_bounds(&self, x: usize, y: usize) -> bool {
         (0..self.width()).contains(&x) && (0..self.total_height()).contains(&y)
     }
@@ -280,20 +211,32 @@ impl Board {
         (0..self.width()).contains(&x) && (self.height() + 1..).contains(&y)
     }
 
-    pub fn place(&mut self, placement: Placement) {
-        self.deoptimize();
-        if let Some(pm) =
-            PLACEMENTS.get_with(|x| x.0 == placement.piece() && x.1 == placement.rotation())
-        {
-            for (ox, oy) in pm.2 {
-                let dx = placement.x().checked_add_signed(*ox);
-                let dy = placement.y().checked_add_signed(*oy);
-                if let (Some(dx), Some(dy)) = (dx, dy) {
-                    if self.is_in_bounds(dx, dy) {
-                        self.data[dy][dx] = placement.piece();
+    pub fn adjusted_piece_offsets(&self, placement: Placement) -> Option<HashSet<(usize, usize)>> {
+        Some(
+            placement
+                .cells()?
+                .into_iter()
+                .map(|(x, mut y)| {
+                    while self.is_cleared(y) {
+                        if y >= placement.y() {
+                            y += 1;
+                            // println!("bumped cell up! {y}");
+                        } else {
+                            if y == 0 { break }
+                            y -= 1;
+                            // println!("bumped cell down! {y}");
+                        }
                     }
-                }
-            }
+
+                    (x, y)
+                })
+                .collect(),
+        )
+    }
+
+    pub fn place(&mut self, placement: Placement) {
+        for (x, y) in self.adjusted_piece_offsets(placement).unwrap() {
+            self.set(x, y, placement.piece())
         }
     }
 
@@ -305,88 +248,36 @@ impl Board {
     }
 
     #[must_use]
+    pub fn with_many_placements(&self, placement: &[Placement]) -> Self {
+        let mut c = self.clone();
+        for p in placement {
+            c.place(*p);
+        }
+
+        c
+    }
+
+    #[must_use]
+    pub fn is_valid_placement(&self, placement: Placement, float: bool) -> bool {
+        // return true;
+        let apo = self.adjusted_piece_offsets(placement);
+        if let Some(a) = apo {
+            a.iter()
+                .all(|&(x, y)| self.is_in_bounds(x, y) && self.get(x, y) == Piece::E)
+                && a.iter()
+                    .any(|&(x, y)| float || y == 0 || self.get(x, y - 1).is_filled())
+        } else {
+            return false;
+        }
+    }
+
+    #[must_use]
     pub fn removed_lines(&self) -> Vec<(usize, &Vec<Piece>)> {
         self.data
             .iter()
             .enumerate()
             .filter(|(_, x)| !x.contains(&Piece::E))
             .collect()
-    }
-
-    pub fn skim_place(&mut self, placement: Placement) {
-        self.deoptimize();
-        if let Some(pm) =
-            PLACEMENTS.get_with(|x| x.0 == placement.piece() && x.1 == placement.rotation())
-        {
-            for (ox, oy) in pm.2 {
-                let dx = placement.x().checked_add_signed(*ox);
-                let dy = placement.y().checked_add_signed(*oy);
-                if let (Some(dx), Some(mut dy)) = (dx, dy) {
-                    if *oy < 0 {
-                        while self.is_cleared(dy) && dy != 0 {
-                        //                        ++++++++++   
-                            dy -= 1;
-                        }
-                    }
-
-                    if *oy > 0 {
-                        while self.is_cleared(dy) {
-                            dy += 1;
-                        }
-                    }
-
-                    if self.is_in_bounds(dx, dy) {
-                        self.data[dy][dx] = placement.piece();
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn skim_place_blind(&mut self, placement: Placement) {
-        self.deoptimize();
-        if let Some(pm) =
-            PLACEMENTS.get_with(|x| x.0 == placement.piece() && x.1 == placement.rotation())
-        {
-            for (ox, oy) in pm.2 {
-                let dx = placement.x().checked_add_signed(*ox);
-                let dy = placement.y().checked_add_signed(*oy);
-                if let (Some(dx), Some(mut dy)) = (dx, dy) {
-                    if *oy < 0 {
-                        while self.is_cleared(dy) {
-                            dy -= 1;
-                        }
-                    }
-
-                    if *oy > 0 {
-                        while self.is_cleared(dy) {
-                            dy += 1;
-                        }
-                    }
-
-                    if self.is_in_bounds(dx, dy) {
-                        self.data[dy][dx] = Piece::D;
-                    }
-                }
-            }
-        }
-    }
-
-    #[must_use]
-    pub fn with_skimmed_placement(&self, placement: Placement) -> Self {
-        let mut s = self.clone();
-        s.skim_place(placement);
-        s
-    }
-
-    #[must_use]
-    pub fn with_many_placements(&self, placements: &[Placement]) -> Self {
-        let mut s = self.clone();
-        for p in placements {
-            s.skim_place(*p);
-        }
-
-        s
     }
 
     #[must_use]
@@ -441,29 +332,6 @@ impl Board {
             self.rows_mut().push(vec![Piece::E; w]);
             self.margin += 1;
         }
-    }
-
-    pub fn skim(&mut self) {
-        let lc = self.line_clears();
-        self.data = self
-            .data
-            .clone()
-            .into_iter()
-            .filter(|x| x.contains(&Piece::E))
-            .vec();
-
-        let mut i = 0;
-        let w = self.width();
-        while i < lc {
-            i += 1;
-            self.data.push(vec![Piece::E; w]);
-        }
-    }
-
-    #[must_use]
-    pub fn skimmed(mut self) -> Self {
-        self.skim();
-        self
     }
 
     #[must_use]

@@ -4,8 +4,8 @@ use clap::Parser;
 use itertools::Itertools;
 
 use crate::{
+    board::Board,
     board_parser::Tetfu,
-    caches::Caches,
     data::kick::Kickset,
     grid::Grid,
     input::{DropType, Key},
@@ -18,7 +18,6 @@ use crate::{
 #[derive(Debug)]
 pub struct Sfce {
     pub program: Program,
-    pub caches: Caches,
     pub buf: String,
 }
 
@@ -59,10 +58,10 @@ pub struct Options {
     #[arg(long = "pw", default_value = "7")]
     /// For commands that output many patterns, the amount of patterns to be shown on one line before separating.
     pub pw: usize,
-    #[arg(long = "no-hold", default_value = "false")]
+    #[arg(short = 'q', long = "no-hold", default_value = "false")]
     /// Whether or not the engine is allowed to use hold.
     pub no_hold: bool,
-    #[arg(long = "no-comments", default_value = "false")]
+    #[arg(short = 'c', long = "no-comments", default_value = "false")]
     /// Whether or not to include page comments in the output. This significantly shortens fumen URLs.
     pub no_comments: bool,
     #[arg(long = "psep", default_value = ";")]
@@ -87,7 +86,7 @@ pub struct Handling {
     #[arg(short = 'i', long = "input-count", default_value = "6")]
     /// The maximum amount of inputs you can do for a single piece.
     pub max: usize,
-    #[arg(long = "das")]
+    #[arg(short = 'a', long = "das")]
     /// Whether or not DAS is utilized, which allows you to move the piece all the way to one side in 1 input.
     pub das: bool,
     #[arg(short = 'f', long = "finesse")]
@@ -130,28 +129,37 @@ pub enum SfceCommand {
     Fumen(FumenCli),
     #[command(subcommand)]
     Pattern(PatternCli),
-    Move {
-        #[arg(short = 't', long = "tetfu")]
-        tetfu: Text<Tetfu>,
-        #[arg(short = 'p', long = "pattern")]
-        pattern: Text<Pattern>,
-        #[arg(short = 'c', default_value = "..")]
-        clears: Ranged<usize>,
-        #[arg(short = 'm')]
-        minimal: bool,
-        #[arg(short = 'q', default_value = "..")]
-        continuous_clears: Ranged<usize>,
-    },
     Test,
     Grid {
         #[arg(short = 't')]
         tetfu: Text<Tetfu>,
     },
+
+    Move {
+        #[arg(short = 't')]
+        tetfu: Text<Tetfu>,
+        #[arg(short = 'p')]
+        pattern: Text<Pattern>,
+        #[arg(short = 'c', default_value = "..")]
+        total_line_clears: Ranged<usize>,
+        #[arg(short = 'q', default_value = "..")]
+        continuous_line_clears: Ranged<usize>,
+    },
+
     Finesse {
         #[arg(short = 't')]
         tetfu: Text<Tetfu>,
+        #[arg(short = 'p')]
+        piece: Piece,
+        #[arg(short = 'x')]
+        x: usize,
+        #[arg(short = 'y')]
+        y: usize,
+        #[arg(short = 'r')]
+        r: Rotation,
     },
-    Inputs {
+
+    Place {
         #[arg(short = 't')]
         tetfu: Text<Tetfu>,
         #[arg(short = 'p')]
@@ -169,19 +177,6 @@ pub enum SfceCommand {
         tetfu: Text<Tetfu>,
         #[arg(short = 'p')]
         piece: Piece,
-        #[arg(short = 'r')]
-        rotation: Rotation,
-    },
-
-    Congruent {
-        #[arg(short = 't')]
-        tetfu: Text<Tetfu>,
-        #[arg(short = 'p')]
-        pattern: Text<Pattern>,
-        #[arg(short = 'c', default_value = "g")]
-        color: Piece,
-        #[arg(short = 'm')]
-        minimal: bool,
     },
 
     Send {
@@ -253,50 +248,49 @@ impl Sfce {
 
         Self {
             program,
-            caches: Caches::default(),
             buf: String::new(),
         }
     }
 
     pub fn run(&mut self) -> anyhow::Result<()> {
-        if !self.program.args.no_cache {
-            self.load_state()?;
-        }
         let i = Instant::now();
         // dbg!(&self);
         match self.program.sub.clone() {
             SfceCommand::Fumen(l) => self.fumen_command(l)?,
             SfceCommand::Pattern(l) => self.pattern_command(l)?,
+
+            SfceCommand::Grid { tetfu } => write!(self.buf, "{}", tetfu.grid().as_deoptimized())?,
+            SfceCommand::Test => self.test_command()?,
             SfceCommand::Move {
                 tetfu,
                 pattern,
-                clears,
-                minimal,
-                continuous_clears
-            } => self.move_command(&tetfu.contents(), &pattern.contents(), clears, minimal, continuous_clears)?,
-            SfceCommand::Finesse { tetfu } => self.finesse_command(&tetfu.contents())?,
-
-            SfceCommand::Inputs {
+                total_line_clears,
+                continuous_line_clears,
+            } => self.move_command(
+                tetfu.contents(),
+                pattern.contents(),
+                total_line_clears,
+                continuous_line_clears,
+            )?,
+            SfceCommand::Finesse {
                 tetfu,
                 piece,
                 x,
                 y,
                 r,
-            } => self.inputs(&tetfu.contents(), piece, x, y, r)?,
-            SfceCommand::Grid { tetfu } => write!(self.buf, "{}", tetfu.grid().as_deoptimized())?,
-            SfceCommand::Test => self.test_command()?,
+            } => self.finesse(&tetfu.contents(), piece, x, y, r)?,
+            SfceCommand::Place {
+                tetfu,
+                piece,
+                x,
+                y,
+                r,
+            } => self.place(&tetfu.contents(), piece, x, y, r)?,
+            SfceCommand::Send { tetfu, piece, keys } => self.send_command(&tetfu, piece, &keys)?,
             SfceCommand::Possible {
                 tetfu,
                 piece,
-                rotation,
-            } => self.possible(&tetfu, piece, rotation),
-            SfceCommand::Congruent {
-                tetfu,
-                pattern,
-                color,
-                minimal,
-            } => self.congruent_command(&tetfu, &pattern, color, minimal)?,
-            SfceCommand::Send { tetfu, piece, keys } => self.send_command(&tetfu, piece, &keys)?,
+            } => self.possible(&tetfu.contents(), piece)?,
         }
 
         if let Some(s) = &self.program.args.output {
@@ -310,16 +304,12 @@ impl Sfce {
             println!("--> took {:.3}s", i.elapsed().as_secs_f64());
         }
 
-        if !self.program.args.no_cache {
-            self.save_state()?;
-        }
-
         Ok(())
     }
 
     #[must_use]
     pub fn tetfu(&self, f: &Grid) -> String {
-        let g = if self.program.args.no_comments {
+        let mut g = if self.program.args.no_comments {
             Grid::from_pages(
                 f.0.clone()
                     .iter_mut()
@@ -332,6 +322,10 @@ impl Sfce {
         } else {
             f.clone()
         };
+
+        if g.0.is_empty() {
+            g.add_page(Board::new(""));
+        }
         if let Some(t) = self.program.args.link_type {
             if t.is_lowercase() {
                 format!("{t}{}", &g.fumen().encode()[1..])

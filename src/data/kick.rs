@@ -53,6 +53,7 @@ impl Kickset {
                 for pair in mr.captures_iter(val) {
                     // println!("{}", pair.get(1).unwrap().as_str());
                     // println!("{}", pair.get(2).unwrap().as_str());
+
                     os.push((
                         pair.get(1).unwrap().as_str().parse().unwrap(),
                         pair.get(2).unwrap().as_str().parse().unwrap(),

@@ -1,11 +1,17 @@
-use std::{collections::HashSet, ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not}};
+use std::{
+    collections::HashSet,
+    ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, Not},
+};
 
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use strum::IntoEnumIterator;
 
-use crate::{board::Board, piece::{Piece, Rotation}, placement::Placement};
-
+use crate::{
+    board::Board,
+    piece::{Piece, Rotation},
+    placement::Placement,
+};
 
 #[derive(Hash, Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub struct Bits {
@@ -189,40 +195,19 @@ impl Bits {
 
     #[must_use]
     pub fn possible_placements(&self, piece: Piece, rotation: Rotation) -> Self {
-        let mut s = self.clone();
-        let rm = s.removed_lines();
-        s.skim();
+        let _ = (piece, rotation);
+        let b = self.clone().board();
+        let ec: HashSet<(usize, usize)> = self.empty_cells().into_iter().filter(|&(x, y)| {
+            let p = Placement::new(piece, x, y, rotation);
+            b.is_valid_placement(p, false)
+        }).collect();
+        let mut m = self.clone() & !self.clone();
 
-        let o = piece.offsets(rotation);
-        let mut m = !o
-            .iter()
-            .map(|&(x, y)| s.shift_for(x, y))
-            .fold(s.clone(), |x, y| x | y);
-
-        for x in 0..s.width {
-            for y in 0..s.height {
-                if !o.iter().map(|(ox, oy)| (*ox, oy - 1)).any(|(ox, oy)| {
-                    let zx = x.checked_add_signed(ox);
-                    let zy = y.checked_add_signed(oy);
-                    if zy.is_none() {
-                        return true;
-                    }
-                    if zx.is_none() {
-                        return false;
-                    }
-                    !s.has(zx.unwrap(), zy.unwrap()) || s.get(zx.unwrap(), zy.unwrap())
-                }) {
-                    m.set(x, y, false);
-                }
-            }
-        }
-
-        m.add_back(&rm.into_iter().collect_vec(), false);
-
+        for (x,y) in ec {
+            m.set(x,y,true);
+        } 
         m
     }
-
-    
 
     #[must_use]
     pub fn all_placements_of_piece(&self, piece: Piece) -> Vec<Placement> {

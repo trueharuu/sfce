@@ -1,9 +1,9 @@
 pub mod fumen;
 pub mod pattern;
-pub mod movec;
 pub mod test;
-pub mod finesse;
+pub mod movec;
 pub mod possible;
-pub mod congruent;
 pub mod edit;
 pub mod send;
+pub mod finesse;
+pub mod place;
