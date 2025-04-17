@@ -24,7 +24,7 @@ impl Sfce {
         let m = Arc::new(Mutex::new(vec![]));
         p.into_par_iter().for_each(|q| {
             self.hold_queues(&q).into_par_iter().for_each(|h| {
-                println!("{h}");
+                // println!("{h}");
                 self.all_placements_of_queue(&b, h.pieces(), continuous_line_clears)
                     .into_par_iter()
                     .for_each(|p| {
@@ -59,7 +59,7 @@ impl Sfce {
                 m.lock()
                     .unwrap()
                     .iter()
-                    .fully_dedup_by_key(|x| x.1.to_string())
+                    // .fully_dedup_by_key(|x| x.1.to_string())
                     .map(|x| x.0.iter().map(|x| x.to_string()).join(";"))
                     .join("\n")
             )?;
