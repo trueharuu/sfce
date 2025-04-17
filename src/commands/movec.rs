@@ -59,7 +59,7 @@ impl Sfce {
                 m.lock()
                     .unwrap()
                     .iter()
-                    // .fully_dedup_by_key(|x| x.1.to_string())
+                    .fully_dedup_by_key(|x| x.1.to_string())
                     .map(|x| x.0.iter().map(|x| x.to_string()).join(";"))
                     .join("\n")
             )?;
