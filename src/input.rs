@@ -209,8 +209,16 @@ impl<'a> Input<'a> {
 
         for (tx, ty) in tests {
             if let Some(dx) = p.x().checked_add_signed(tx) {
-                if let Some(dy) = p.y().checked_add_signed(ty) {
+                if let Some(mut dy) = p.y().checked_add_signed(ty) {
                     let mut np = p;
+                    while self.board.is_cleared(dy) {
+                        if ty > 0 {
+                            dy += 1;
+                        } else {
+                            if dy == 0 { break; }
+                            dy -= 1;
+                        }
+                    }
                     np.move_to((dx, dy));
                     np.set_rotation(rn);
                     if self.is_valid(np) {

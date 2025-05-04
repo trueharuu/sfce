@@ -341,7 +341,7 @@ impl Sfce {
                         for c in r {
                             z += "\x1b[48;2;";
                             z += match c {
-                                Piece::I => "66;175;275",
+                                Piece::I => "66;175;255",
                                 Piece::J => "17;101;181",
                                 Piece::O => "246;208;60",
                                 Piece::L => "243;137;39",
