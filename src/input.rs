@@ -119,7 +119,7 @@ impl<'a> Input<'a> {
     }
 
     pub fn sonic_drop(&mut self) {
-        while self.can_move(Rotation::South) {
+        while self.can(Key::SoftDrop) {
             self.soft_drop();
         }
     }

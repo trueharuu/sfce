@@ -212,6 +212,10 @@ impl Board {
     }
 
     pub fn adjusted_piece_offsets(&self, placement: Placement) -> Option<HashSet<(usize, usize)>> {
+        if self.get(placement.x(), placement.y()) != Piece::E {
+            return None;
+        }
+
         Some(
             placement
                 .cells()?
@@ -222,7 +226,9 @@ impl Board {
                             y += 1;
                             // println!("bumped cell up! {y}");
                         } else {
-                            if y == 0 { break }
+                            if y == 0 {
+                                break;
+                            }
                             y -= 1;
                             // println!("bumped cell down! {y}");
                         }
@@ -261,11 +267,14 @@ impl Board {
     pub fn is_valid_placement(&self, placement: Placement, float: bool) -> bool {
         // return true;
         let apo = self.adjusted_piece_offsets(placement);
+        // dbg!(&apo);
+
+        // dbg!(placement.piece().offsets(placement.rotation()));
         if let Some(a) = apo {
             a.iter()
                 .all(|&(x, y)| self.is_in_bounds(x, y) && self.get(x, y) == Piece::E)
                 && a.iter()
-                    .any(|&(x, y)| float || y == 0 || self.get(x, y - 1).is_filled())
+                    .any(|&(x, y)| float || y == 0 || self.get(x, y - 1) != Piece::E)
         } else {
             return false;
         }
